@@ -1,3 +1,4 @@
+import { backgroundRefresh } from "./backgroundRefresh";
 import { workspaceApi } from './workspaceApi';
 import { ApiError } from './storage';
 import { readWorkspaceRows, readWorkspaceRow, updateWorkspaceRow, readDocumentRows, readDocumentRow, updateDocumentRow } from '../workspaces/localStore';
@@ -10,12 +11,15 @@ const emit = () => { listeners.forEach(listener => listener()); channel?.postMes
 export const subscribeWorkspaces = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 let timer: ReturnType<typeof setTimeout> | undefined;
 let running: Promise<void> | undefined;
+let syncAgain = false;
+let refreshingWorkspaces: Promise<WorkspaceRow[]> | undefined;
 let retryDelay = 3000;
 let initialized = false;
 let lastSyncError = '';
 export const workspaceSyncError = () => lastSyncError;
 
 function schedule(delay = 2000) {
+  if (running) syncAgain = true;
   if (timer) clearTimeout(timer);
   timer = setTimeout(() => { timer = undefined; void syncWorkspaces().catch(() => undefined); }, delay);
   // Browser timers are numeric; Node test timers should not hold the process open.
@@ -27,10 +31,14 @@ export function startWorkspaceSync(): () => void {
   initialized = true;
   channel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('hays-workspace-events') : undefined;
   if (channel) channel.onmessage = () => listeners.forEach(listener => listener());
-  const resume = () => schedule(0);
+  const resume = () => {
+    schedule(0);
+    void refreshWorkspacesInBackground().catch(() => undefined);
+  };
   window.addEventListener('online', resume);
+  window.addEventListener('focus', resume);
   resume();
-  return () => { window.removeEventListener('online', resume); channel?.close(); channel = undefined; initialized = false; if (timer) clearTimeout(timer); };
+  return () => { window.removeEventListener('online', resume); window.removeEventListener('focus', resume); channel?.close(); channel = undefined; initialized = false; if (timer) clearTimeout(timer); };
 }
 
 function sameValue(a: unknown, b: unknown): boolean {
@@ -83,12 +91,28 @@ async function cacheServer(workspace: Workspace) {
   await updateWorkspaceRow(workspace.id, current => current?.dirty || current?.inFlight || current?.conflict || (current && current.serverRevision > workspace.revision) ? current : { workspace, serverRevision: workspace.revision, dirty: false });
 }
 
-export async function refreshWorkspaces(): Promise<WorkspaceRow[]> {
-  const result = await workspaceApi<{ workspaces: Workspace[] }>('listWorkspaces');
-  if (!Array.isArray(result.workspaces)) throw new Error('The workspace service returned an invalid job list.');
-  for (const workspace of result.workspaces) await cacheServer(workspace);
-  emit();
-  return readWorkspaceRows();
+export function refreshWorkspaces(): Promise<WorkspaceRow[]> {
+  if (refreshingWorkspaces) return refreshingWorkspaces;
+  refreshingWorkspaces = (async () => {
+    const result = await workspaceApi<{ workspaces: Workspace[] }>('listWorkspaces');
+    if (!Array.isArray(result.workspaces)) throw new Error('The workspace service returned an invalid job list.');
+    for (const workspace of result.workspaces) await cacheServer(workspace);
+    emit();
+    return readWorkspaceRows();
+  })().finally(() => { refreshingWorkspaces = undefined; });
+  return refreshingWorkspaces;
+}
+
+export function refreshWorkspacesInBackground(): Promise<void> {
+  return backgroundRefresh('workspaces:list', async () => { await refreshWorkspaces(); });
+}
+
+export function refreshWorkspaceInBackground(id: string): Promise<void> {
+  return backgroundRefresh(`workspace:${id}`, async () => { await loadWorkspace(id); });
+}
+
+export function refreshJobDocumentsInBackground(id: string): Promise<void> {
+  return backgroundRefresh(`workspace:documents:${id}`, async () => { await refreshJobDocuments(id); });
 }
 
 export async function loadWorkspace(id: string): Promise<WorkspaceRow | undefined> {
@@ -135,23 +159,26 @@ export function syncWorkspaces(): Promise<void> {
   running = (async () => {
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
     let failure: unknown;
-    for (const row of await readWorkspaceRows()) {
-      if (!row.dirty && !row.inFlight) continue;
-      try { await syncWorkspace(row.workspace.id); } catch (error) { failure = error; }
-    }
-    for (const row of await readDocumentRows()) {
-      if (!row.pending) continue;
-      const job = await readWorkspaceRow(row.document.workspaceId);
-      if (!job || job.dirty || job.inFlight || job.conflict || !job.serverRevision) continue;
-      try {
-        const { document, data, mutationId } = row;
-        const result = await workspaceApi<{ document: JobDocument }>('saveJobDocument', { workspaceId: document.workspaceId, documentId: document.id, mutationId, kind: document.kind, inputFingerprint: document.inputFingerprint, templateVersion: document.templateVersion, file: { name: document.name, mimeType: 'application/pdf', size: atob(data!).length, data } });
-        if (!validDocument(result.document) || result.document.id !== document.id || result.document.workspaceId !== document.workspaceId || result.document.inputFingerprint !== document.inputFingerprint || result.document.templateVersion !== document.templateVersion || result.document.kind !== document.kind) throw new Error('The server did not acknowledge the document.');
-        await updateDocumentRow(document.id, current => current ? { ...current, document: result.document, pending: false, error: undefined } : current); emit();
-      } catch (error) {
-        await updateDocumentRow(row.document.id, current => current ? { ...current, error: error instanceof Error ? error.message : String(error) } : current); emit(); failure = error;
+    do {
+      syncAgain = false;
+      for (const row of await readWorkspaceRows()) {
+        if (!row.dirty && !row.inFlight) continue;
+        try { await syncWorkspace(row.workspace.id); } catch (error) { failure = error; }
       }
-    }
+      for (const row of await readDocumentRows()) {
+        if (!row.pending) continue;
+        const job = await readWorkspaceRow(row.document.workspaceId);
+        if (!job || job.dirty || job.inFlight || job.conflict || !job.serverRevision) continue;
+        try {
+          const { document, data, mutationId } = row;
+          const result = await workspaceApi<{ document: JobDocument }>('saveJobDocument', { workspaceId: document.workspaceId, documentId: document.id, mutationId, kind: document.kind, inputFingerprint: document.inputFingerprint, templateVersion: document.templateVersion, file: { name: document.name, mimeType: 'application/pdf', size: atob(data!).length, data } });
+          if (!validDocument(result.document) || result.document.id !== document.id || result.document.workspaceId !== document.workspaceId || result.document.inputFingerprint !== document.inputFingerprint || result.document.templateVersion !== document.templateVersion || result.document.kind !== document.kind) throw new Error('The server did not acknowledge the document.');
+          await updateDocumentRow(document.id, current => current ? { ...current, document: result.document, pending: false, error: undefined } : current); emit();
+        } catch (error) {
+          await updateDocumentRow(row.document.id, current => current ? { ...current, error: error instanceof Error ? error.message : String(error) } : current); emit(); failure = error;
+        }
+      }
+    } while (syncAgain && !failure);
     if (failure) throw failure;
   })().then(() => { lastSyncError = ''; retryDelay = 3000; }, error => { lastSyncError = error instanceof Error ? error.message : String(error); schedule(retryDelay); retryDelay = Math.min(retryDelay * 2, 60000); throw error; }).finally(() => { running = undefined; emit(); });
   return running;
@@ -159,6 +186,7 @@ export function syncWorkspaces(): Promise<void> {
 
 export async function flushWorkspace(id: string): Promise<Workspace> {
   // Other jobs may need attention; only this job determines whether it can proceed.
+  if (running) syncAgain = true;
   await syncWorkspaces().catch(() => undefined);
   const row = await readWorkspaceRow(id);
   if (!row || row.dirty || row.inFlight || row.conflict || !row.serverRevision) throw new Error(row?.error || 'This job is saved on this device and still needs to sync. Connect and retry.');

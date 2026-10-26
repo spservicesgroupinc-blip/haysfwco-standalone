@@ -24,8 +24,8 @@ import {
 import {
   cachedWorkspace,
   cachedJobDocuments,
-  loadWorkspace,
-  refreshJobDocuments,
+  refreshWorkspaceInBackground,
+  refreshJobDocumentsInBackground,
   saveWorkspaceLocally,
   subscribeWorkspaces,
   syncWorkspaces,
@@ -197,6 +197,9 @@ export default function JobWorkspace({
       if (!active) return;
       setRow(local);
       setDocuments(files);
+      if (local?.serverRevision) {
+        void refreshJobDocumentsInBackground(id).catch(() => undefined);
+      }
       if (
         local &&
         (!current.current ||
@@ -217,15 +220,9 @@ export default function JobWorkspace({
       }
     };
     void read().catch((value) => active && setError(textOf(value)));
-    void cachedWorkspace(id)
-      .then(async (local) => {
-        if (!local || local.serverRevision) {
-          await loadWorkspace(id);
-          await refreshJobDocuments(id).catch(() => undefined);
-          await read();
-        }
-      })
-      .catch((value) => active && setError(textOf(value)));
+    void cachedWorkspace(id).then(local => {
+      if (!local || local.serverRevision) return refreshWorkspaceInBackground(id);
+    }).catch((value) => active && setError(textOf(value)));
     const unsubscribe = subscribeWorkspaces(() => {
       void read().catch((value) => active && setError(textOf(value)));
     });

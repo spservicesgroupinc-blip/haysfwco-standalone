@@ -9,3 +9,14 @@ The job dashboard shows change requests, request attachments and customer PDFs, 
 CSV replacement never deletes saved workspaces, requests, or document history. Existing Apps Script actions and schemas are used; this feature requires no backend schema change.
 
 Verify with `npm run build`, `node --import tsx --test tests/record-requests.test.ts tests/unified-records.test.ts`, and `npx playwright test tests/customer-csv-autofill.spec.ts`.
+
+
+## Background synchronization
+
+Customer lists, contacts, activities, and tasks read IndexedDB first. A deduplicated background refresh updates them, at most once per 30 seconds for normal reads; explicit import identity checks can force refresh. Cloud data is cached in batches and only actual changes notify subscribers, preventing notification/fetch loops. The directory renders 50 records initially and keeps contact-management tools unloaded until opened.
+
+All request, CRM, job, document, and reference-file calls use one Apps Script request queue. Saves take precedence over waiting directory reads; identical reads share a request. A browser lock coordinates tabs on the same origin. Request timeouts start when the execution actually begins, and script BUSY responses retry the same payload. Existing Apps Script locks remain responsible for coordinating other devices.
+
+The job/document worker drains new saves queued during a running pass before completing. Document metadata refreshes independently from job detail refreshes and starts automatically when a new local job receives its server revision. Temporary refresh failures retry in the background with backoff; going online or returning to the app also resumes pending work. Conflicting edits still require review and never overwrite saved corrections automatically.
+
+No Apps Script schema or deployment change is needed for this synchronization update. Application and real-device testing remain with the user.

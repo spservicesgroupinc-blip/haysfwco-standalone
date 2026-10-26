@@ -297,3 +297,35 @@ test('a refresh started before a save cannot roll the acknowledged workspace bac
   assert.equal((await cachedWorkspace(value.id))?.serverRevision, 2);
   assert.equal((await cachedWorkspace(value.id))?.workspace.record.customer.customerName, 'Acknowledged newer edit');
 });
+
+
+test('work queued during a sync uploads its document without a second manual attempt', async () => {
+  const first = job('Already syncing');
+  const second = job('Queued during upload');
+  await saveWorkspaceLocally(first);
+  const originalFetch = globalThis.fetch;
+  let release!: () => void;
+  let started!: () => void;
+  const ready = new Promise<void>(resolve => { started = resolve; });
+  const hold = new Promise<void>(resolve => { release = resolve; });
+  globalThis.fetch = async (input, init) => {
+    const body = JSON.parse(String(init?.body));
+    if (body.action === 'saveWorkspace' && body.workspace.id === first.id) {
+      started();
+      await hold;
+    }
+    return originalFetch(input, init);
+  };
+  const syncing = syncWorkspaces();
+  await ready;
+  try {
+    await saveWorkspaceLocally(second);
+    await queueJobDocument(second, 'welcome', 'welcome.pdf', new TextEncoder().encode('%PDF-1.7\nqueued document'));
+  } finally { release(); }
+  await syncing;
+  assert.equal((await cachedWorkspace(second.id))?.serverRevision, 1);
+  const files = await cachedJobDocuments(second.id);
+  assert.equal(files.length, 1);
+  assert.equal(files[0].pending, false);
+  assert.ok(files[0].document.driveFileId);
+});

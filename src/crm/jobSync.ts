@@ -62,7 +62,7 @@ async function runJobCustomerSync(
 
   // Imports can already have created shared CRM records on the server. Hydrate
   // those IDs before staging local additions, including on a brand-new device.
-  const hydrated = await refreshCustomersFromServer().then(() => true, () => false);
+  const hydrated = await refreshCustomersFromServer(true).then(() => true, () => false);
   const customers = await listLocalCustomers();
   const byName = new Map<string, Customer>();
   for (const customer of customers) {

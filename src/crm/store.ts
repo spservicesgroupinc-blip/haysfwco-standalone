@@ -135,23 +135,37 @@ export async function markCrmMutationFailed(mutation: CrmMutation, error: string
 }
 
 /** Cloud refreshes must never replace a pending correction or a newer revision. */
-export async function cacheCrmEntity(kind: CrmMutation["kind"], entity: Customer | Task | Activity): Promise<void> {
+export function cacheCrmEntity(kind: CrmMutation["kind"], entity: Customer | Task | Activity): Promise<void> {
+  return cacheCrmEntities(kind, [entity]);
+}
+
+/** Cache a refresh in one transaction, and notify once only when its data changed. */
+export async function cacheCrmEntities(kind: CrmMutation["kind"], entities: (Customer | Task | Activity)[]): Promise<void> {
   const db = await database();
+  let changed = false;
   await new Promise<void>((resolve, reject) => {
     const name = entityStore(kind);
     const tx = db.transaction([name, "outbox"], "readwrite");
     const pending = tx.objectStore("outbox").getAll();
     pending.onsuccess = () => {
-      if ((pending.result as CrmMutation[]).some(row => row.kind === kind && row.entity.id === entity.id)) return;
+      const protectedIds = new Set((pending.result as CrmMutation[]).filter(row => row.kind === kind).map(row => row.entity.id));
       const store = tx.objectStore(name);
-      const current = store.get(entity.id);
-      current.onsuccess = () => {
-        if ((current.result?.revision ?? 0) <= ((entity as Customer | Task).revision ?? 0)) store.put(entity);
+      const saved = store.getAll();
+      saved.onsuccess = () => {
+        const current = new Map<string, Customer | Task | Activity>(saved.result.map(entity => [entity.id, entity]));
+        for (const entity of entities) {
+          const previous = current.get(entity.id);
+          if (protectedIds.has(entity.id) || ((previous as Customer | Task)?.revision ?? 0) > ((entity as Customer | Task).revision ?? 0)) continue;
+          if (JSON.stringify(previous) === JSON.stringify(entity)) continue;
+          store.put(entity);
+          changed = true;
+        }
       };
     };
     tx.oncomplete = () => resolve();
     tx.onabort = tx.onerror = () => reject(tx.error);
   });
+  if (changed) emit();
 }
 
 export const listLocalCustomers = () =>

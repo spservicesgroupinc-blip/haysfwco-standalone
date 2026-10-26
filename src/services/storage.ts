@@ -1,3 +1,4 @@
+import { appsScriptRequest } from "./appsScriptQueue";
 import type {
   AttachmentKind,
   ChangeRequest,
@@ -323,42 +324,50 @@ async function requestJson(
   init: RequestInit,
   timeoutMs: number,
 ): Promise<any> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, { ...init, signal: controller.signal });
-    const text = await response.text();
-    const trimmed = text.trim();
-    if (trimmed.startsWith("<") || trimmed.startsWith("The page")) {
-      if (!response.ok) {
-        throw new ApiError(
-          `Service returned HTTP ${response.status} (${response.statusText || "error"})`,
-        );
-      }
-      throw new ApiError(
-        "The sync service returned an HTML error response instead of JSON.",
-      );
-    }
+  const parsedUrl = new URL(url);
+  const payload = init.body ? JSON.parse(String(init.body)) as Record<string, unknown> : Object.fromEntries(parsedUrl.searchParams);
+  const action = String(payload.action || "bootstrap");
+  return appsScriptRequest(parsedUrl.origin + parsedUrl.pathname, action, payload, async () => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      return JSON.parse(text);
-    } catch {
-      if (!response.ok) {
+      const response = await fetch(url, { ...init, signal: controller.signal });
+      const text = await response.text();
+      const trimmed = text.trim();
+      if (trimmed.startsWith("<") || trimmed.startsWith("The page")) {
+        if (!response.ok) {
+          throw new ApiError(
+            `Service returned HTTP ${response.status} (${response.statusText || "error"})`,
+          );
+        }
         throw new ApiError(
-          `Service returned HTTP ${response.status} (${response.statusText || "error"})`,
+          "The sync service returned an HTML error response instead of JSON.",
         );
       }
-      throw new ApiError("The sync service returned an invalid response.");
+      try {
+        const payload = JSON.parse(text);
+        if (payload?.ok === false && payload.code === "BUSY") throw new ApiError(payload.error || "The shared service is busy.", "BUSY");
+        return payload;
+      } catch (error) {
+        if (error instanceof ApiError) throw error;
+        if (!response.ok) {
+          throw new ApiError(
+            `Service returned HTTP ${response.status} (${response.statusText || "error"})`,
+          );
+        }
+        throw new ApiError("The sync service returned an invalid response.");
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        throw new ApiError(
+          "The sync service did not respond in time. Try again.",
+        );
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
     }
-  } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") {
-      throw new ApiError(
-        "The sync service did not respond in time. Try again.",
-      );
-    }
-    throw error;
-  } finally {
-    clearTimeout(timer);
-  }
+  });
 }
 
 async function get<T>(params: Record<string, string | undefined>): Promise<T> {

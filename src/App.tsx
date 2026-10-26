@@ -77,7 +77,7 @@ const RequestWorkspaceLink = lazy(
   () => import("./documents/RequestWorkspaceLink"),
 );
 import { openUnifiedRecord, unifiedRecords } from "./services/unifiedRecords";
-import { cachedWorkspaces, refreshWorkspaces } from "./services/workspaces";
+import { cachedWorkspaces } from "./services/workspaces";
 import { listCustomers, startCrmSync, syncCustomersFromJobs } from "./crm";
 import { CUSTOMER_REFERENCE_CHANGED, getCachedCustomerReference, getCustomerReference } from "./documents/services/customerReferenceService";
 import type { CustomerReferenceSnapshot } from "./documents/services/customerReference";
@@ -805,7 +805,6 @@ export default function App() {
             onOpenJobs={() => goTo({ kind: "workspaces" })}
             onOpenJob={(entry) => {
               void (async () => {
-                await refreshWorkspaces();
                 const record = unifiedRecords(await cachedWorkspaces(), [entry], await listCustomers())
                   .find(record => record.jobNumber.trim().toUpperCase() === entry.jobNumber.trim().toUpperCase());
                 if (record) goTo({ kind: "workspace", id: (await openUnifiedRecord(record)).id });

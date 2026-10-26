@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FileText, Plus, Search } from "lucide-react";
 import type { ChangeRequest, JobEntry, RequestSummary } from "../types";
 import type { RequestDraft } from "../services/requestDrafts";
@@ -7,6 +7,7 @@ import { createWorkspace } from "../workspaces/model";
 import {
   cachedWorkspaces,
   refreshWorkspaces,
+  refreshWorkspacesInBackground,
   saveWorkspaceLocally,
   subscribeWorkspaces,
 } from "../services/workspaces";
@@ -55,6 +56,8 @@ export default function JobsDocuments({
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [contactsOpen, setContactsOpen] = useState(false);
+  const [limit, setLimit] = useState(50);
   const [tool, setTool] = useState<"jobs" | "migration" | "reference">("jobs");
   useEffect(() => setTool(initialTool || "jobs"), [initialTool]);
   useEffect(() => {
@@ -72,7 +75,7 @@ export default function JobsDocuments({
       unsubscribe();
     };
   }, []);
-  const directory = [...jobs, ...customerOptions(jobs, customers)];
+  const directory = useMemo(() => [...jobs, ...customerOptions(jobs, customers)], [jobs, customers]);
   useEffect(() => {
     let active = true;
     const read = async () => {
@@ -80,7 +83,7 @@ export default function JobsDocuments({
       if (active) setRows(cached);
     };
     void read().catch((value) => active && setError(String(value)));
-    void refreshWorkspaces()
+    void refreshWorkspacesInBackground()
       .then(() => {
         if (active) setError("");
       })
@@ -118,6 +121,8 @@ export default function JobsDocuments({
     finally { setBusy(false); }
   }
 
+  const records = useMemo(() => unifiedRecords(rows, jobs, customers), [rows, jobs, customers]);
+  useEffect(() => setLimit(50), [search]);
   if (workspaceId)
     return (
       <JobWorkspace
@@ -133,7 +138,6 @@ export default function JobsDocuments({
       />
     );
   const query = search.trim().toLowerCase();
-  const records = unifiedRecords(rows, jobs, customers);
   const visible = records
     .filter((row) =>
       [
@@ -217,7 +221,7 @@ export default function JobsDocuments({
               All jobs &amp; customers <span className="workspace-count">{records.length}</span>
             </h2>
             {visible.length ? (
-              visible.map(record => {
+              visible.slice(0, limit).map(record => {
                 const changes = requests.filter(request => requestBelongsToRecord(request, {
                   id: record.workspace?.workspace.id || "", jobNumber: record.jobNumber,
                   name: record.name, address: record.address,
@@ -241,9 +245,10 @@ export default function JobsDocuments({
               </p>
             )}
           </section>
-          <details className="workspace-panel">
+          {visible.length > limit && <button className="button" onClick={() => setLimit(value => value + 50)}>Show more jobs &amp; customers ({visible.length - limit} remaining)</button>}
+          <details className="workspace-panel" onToggle={event => setContactsOpen(event.currentTarget.open)}>
             <summary>Manage customer contacts &amp; follow-ups</summary>
-            <CustomerList onOpen={onOpenCustomer} />
+            {contactsOpen && <CustomerList onOpen={onOpenCustomer} />}
           </details>
         </>
       )}

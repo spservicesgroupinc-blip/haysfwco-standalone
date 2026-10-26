@@ -22,3 +22,24 @@ test("a customer edit and its retry identity are stored durably together", async
     assert.ok(rows[0].mutationId);
   } finally { db.close(); }
 });
+
+
+test("cached customers render while their cloud refresh is still pending", { timeout: 2000 }, async () => {
+  const { listCustomers } = await import("../src/crm/index");
+  const { refreshCustomersFromServer } = await import("../src/crm/sync");
+  const originalFetch = globalThis.fetch;
+  let release!: (response: Response) => void;
+  const cloud = new Promise<Response>(resolve => { release = resolve; });
+  let calls = 0;
+  globalThis.fetch = async () => { calls++; return cloud; };
+  try {
+    const local = await listCustomers();
+    assert.ok(local.some(customer => customer.id === "durable-customer"));
+    await listCustomers();
+    assert.equal(calls, 1, "Subscriber reads share one cloud refresh");
+  } finally {
+    release(new Response(JSON.stringify({ ok: true, customers: [] })));
+    await refreshCustomersFromServer();
+    globalThis.fetch = originalFetch;
+  }
+});

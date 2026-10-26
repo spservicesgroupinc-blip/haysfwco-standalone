@@ -2,6 +2,7 @@ import {
   notifyCrm,
   refreshActivitiesForCustomer,
   refreshCustomersFromServer,
+  refreshCustomerFromServer,
   refreshTasksForCustomer,
   stageActivity,
   stageCustomer,
@@ -18,7 +19,6 @@ import {
   listLocalCustomers,
   listLocalTasks,
   putCustomer,
-  putCustomerSilent,
 } from "./store";
 import { customerNameKey, jobNumberKey } from "./jobSync";
 import { cachedJobDirectory } from "../services/storage";
@@ -62,7 +62,7 @@ const jobIdentity = (jobNumber: string | undefined, fallback: string) =>
   jobNumberKey(jobNumber) ? `job:${jobNumberKey(jobNumber)}` : fallback;
 
 export async function listCustomers(): Promise<CustomerSummary[]> {
-  await refreshCustomersFromServer().catch(() => undefined);
+  void refreshCustomersFromServer().catch(() => undefined);
   const [customers, workspaceRows, tasks] = await Promise.all([
     listLocalCustomers(),
     readWorkspaceRows(),
@@ -123,20 +123,14 @@ export async function listCustomers(): Promise<CustomerSummary[]> {
 
 export async function openCustomer(customerId: string): Promise<Customer | null> {
   const local = await getLocalCustomer(customerId);
-  try {
-    const remote = await api.openCustomer(customerId);
-    if (remote) {
-      await putCustomerSilent(remote);
-      return remote;
-    }
-  } catch {
-    // Offline or backend not yet deployed: serve the device copy.
-  }
-  return local ?? null;
+  const refresh = refreshCustomerFromServer(customerId);
+  if (local) { void refresh.catch(() => undefined); return local; }
+  await refresh.catch(() => undefined);
+  return (await getLocalCustomer(customerId)) ?? null;
 }
 
 export async function createCustomer(input: NewCustomerInput): Promise<Customer> {
-  await refreshCustomersFromServer().catch(() => undefined);
+  await refreshCustomersFromServer(true).catch(() => undefined);
   const nameKey = customerNameKey(input.name);
   const phoneKey = (value: string | undefined) => (value || "").replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
   const matches = (await listLocalCustomers()).filter(customer =>
@@ -193,7 +187,7 @@ export async function mergeCustomers(targetId: string, sourceId: string): Promis
 }
 
 export async function listActivities(customerId: string): Promise<Activity[]> {
-  await refreshActivitiesForCustomer(customerId).catch(() => undefined);
+  void refreshActivitiesForCustomer(customerId).catch(() => undefined);
   const activities = await listLocalActivities(customerId);
   return activities.sort((a, b) => b.at.localeCompare(a.at));
 }
@@ -230,7 +224,7 @@ export async function logCommunication(
 }
 
 export async function listTasks(customerId: string): Promise<Task[]> {
-  await refreshTasksForCustomer(customerId).catch(() => undefined);
+  void refreshTasksForCustomer(customerId).catch(() => undefined);
   const tasks = await listLocalTasks(customerId);
   return tasks.sort((a, b) => {
     const aOpen = a.status === "open" ? 0 : 1;

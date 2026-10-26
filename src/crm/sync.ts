@@ -1,7 +1,8 @@
+import { backgroundRefresh } from "../services/backgroundRefresh";
 import { ApiError } from "../services/storage";
 import * as api from "./api";
 import {
-  getLocalCustomer, cacheCrmEntity, pendingCrmMutations, stageCrmMutation,
+  listLocalCustomers, cacheCrmEntity, cacheCrmEntities, pendingCrmMutations, stageCrmMutation,
   acknowledgeCrmMutation, markCrmMutationFailed, subscribe as subscribeStore,
 } from "./store";
 import type { Activity, Customer, Task } from "./types";
@@ -12,9 +13,11 @@ export const notifyCrm = emit;
 let initialized = false;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let running: Promise<void> | undefined;
+let rerunRequested = false;
 let retryDelay = 1000;
 let bridge: (() => void) | undefined;
 function schedule(delay = 0) {
+  if (running) { rerunRequested = true; return; }
   if (!initialized) return;
   if (timer) clearTimeout(timer);
   timer = setTimeout(() => { timer = undefined; void syncCrm().catch(() => undefined); }, delay);
@@ -48,23 +51,36 @@ export async function stageActivity(activity: Activity): Promise<void> {
   await stageCrmMutation({ kind: "activity", entity: structuredClone(activity), mutationId: crypto.randomUUID() });
   schedule();
 }
-export async function refreshCustomersFromServer(): Promise<void> {
-  const summaries = await api.listCustomers();
-  for (const summary of summaries) {
-    const existing = await getLocalCustomer(summary.id);
-    await cacheCrmEntity("customer", {
-      ...existing, ...summary, revision: summary.revision ?? existing?.revision ?? 0,
-      createdAt: summary.createdAt ?? existing?.createdAt ?? summary.updatedAt,
-      cityStateZip: summary.cityStateZip ?? existing?.cityStateZip,
-      mergedFromIds: summary.mergedFromIds ?? existing?.mergedFromIds,
-    });
-  }
+export function refreshCustomersFromServer(force = false): Promise<void> {
+  return backgroundRefresh("crm:customers", async () => {
+    const summaries = await api.listCustomers();
+    const existing = new Map((await listLocalCustomers()).map(customer => [customer.id, customer]));
+    await cacheCrmEntities("customer", summaries.map(summary => {
+      const local = existing.get(summary.id);
+      return {
+        ...local, ...summary, revision: summary.revision ?? local?.revision ?? 0,
+        createdAt: summary.createdAt ?? local?.createdAt ?? summary.updatedAt,
+        cityStateZip: summary.cityStateZip ?? local?.cityStateZip,
+        mergedFromIds: summary.mergedFromIds ?? local?.mergedFromIds,
+      };
+    }));
+  }, force);
 }
-export async function refreshActivitiesForCustomer(customerId: string): Promise<void> {
-  for (const activity of await api.listActivities(customerId)) await cacheCrmEntity("activity", activity);
+export function refreshCustomerFromServer(customerId: string): Promise<void> {
+  return backgroundRefresh(`crm:customer:${customerId}`, async () => {
+    const customer = await api.openCustomer(customerId);
+    if (customer) await cacheCrmEntity("customer", customer);
+  });
 }
-export async function refreshTasksForCustomer(customerId: string): Promise<void> {
-  for (const task of await api.listTasks(customerId)) await cacheCrmEntity("task", task);
+export function refreshActivitiesForCustomer(customerId: string): Promise<void> {
+  return backgroundRefresh(`crm:activities:${customerId}`, async () => {
+    await cacheCrmEntities("activity", await api.listActivities(customerId));
+  });
+}
+export function refreshTasksForCustomer(customerId: string): Promise<void> {
+  return backgroundRefresh(`crm:tasks:${customerId}`, async () => {
+    await cacheCrmEntities("task", await api.listTasks(customerId));
+  });
 }
 /** Durable, ordered, retry-safe writes; conflicts stay in the outbox for review. */
 export function syncCrm(): Promise<void> {
@@ -93,14 +109,20 @@ export function syncCrm(): Promise<void> {
         blocked.add(key); failure = error;
       }
     }
-    try { await refreshCustomersFromServer(); } catch (error) { failure = error; }
+    void refreshCustomersFromServer(true).catch(() => undefined);
     emit();
     if (failure) throw failure;
   };
   running = (typeof navigator !== "undefined" && navigator.locks
     ? navigator.locks.request("hays-crm-sync", execute) : execute())
     .then(() => { retryDelay = 1000; }, error => {
-      schedule(retryDelay); retryDelay = Math.min(retryDelay * 2, 30000); throw error;
-    }).finally(() => { running = undefined; });
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => { timer = undefined; void syncCrm().catch(() => undefined); }, retryDelay);
+      if (typeof timer === "object" && "unref" in timer) timer.unref();
+      retryDelay = Math.min(retryDelay * 2, 30000); throw error;
+    }).finally(() => {
+      running = undefined;
+      if (rerunRequested) { rerunRequested = false; schedule(); }
+    });
   return running;
 }
