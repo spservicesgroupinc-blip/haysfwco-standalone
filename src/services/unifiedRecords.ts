@@ -3,7 +3,7 @@ import type { JobEntry } from "../types";
 import type { Workspace, WorkspaceRow } from "../workspaces/types";
 import { createWorkspace, normalizeJobNumber, workspaceFromDirectory } from "../workspaces/model";
 import { customerIdForPick, customerNameKey } from "./customerDirectory";
-import { cachedWorkspaces, saveWorkspaceLocally } from "./workspaces";
+import { cachedWorkspaces, refreshWorkspaces, saveWorkspaceLocally } from "./workspaces";
 
 export interface UnifiedRecord {
   id: string;
@@ -53,18 +53,36 @@ let opening: Promise<unknown> = Promise.resolve();
 /** Both old customer links and directory rows resolve to the same permanent workspace. */
 export function openUnifiedRecord(record: UnifiedRecord): Promise<Workspace> {
   const next = opening.then(async () => {
+    if (!record.workspace && (typeof navigator === "undefined" || navigator.onLine !== false)) await refreshWorkspaces();
     const rows = await cachedWorkspaces();
     if (record.workspace) {
       const found = rows.find(row => row.workspace.id === record.workspace!.workspace.id);
-      if (found) return found.workspace;
+      if (found) {
+        if (!found.workspace.customerId && record.customerId) {
+          const linked = { ...found.workspace, customerId: record.customerId };
+          await saveWorkspaceLocally(linked, found.workspace);
+          return linked;
+        }
+        return found.workspace;
+      }
       return record.workspace.workspace;
     }
     const number = normalizeJobNumber(record.jobNumber);
     const matches = rows.filter(row => number
       ? normalizeJobNumber(row.workspace.record.customer.jobNumber) === number
-      : record.customerId ? row.workspace.customerId === record.customerId
-      : customerNameKey(row.workspace.record.customer.customerName) === customerNameKey(record.name));
-    if (matches.length === 1) return matches[0].workspace;
+      : !row.workspace.record.customer.jobNumber.trim() &&
+        customerNameKey(row.workspace.record.customer.customerName) === customerNameKey(record.name) &&
+        customerNameKey(row.workspace.record.customer.lossAddress) === customerNameKey(record.address) &&
+        !!customerNameKey(record.name));
+    if (matches.length === 1) {
+      const found = matches[0].workspace;
+      if (!found.customerId && record.customerId) {
+        const linked = { ...found, customerId: record.customerId };
+        await saveWorkspaceLocally(linked, found);
+        return linked;
+      }
+      return found;
+    }
     if (matches.length > 1) throw new Error("More than one record matches. Open the row with the correct job number.");
     const workspace = record.directory ? workspaceFromDirectory(record.directory) : createWorkspace();
     if (!record.directory) Object.assign(workspace.record.customer, {

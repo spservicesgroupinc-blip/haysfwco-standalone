@@ -75,6 +75,7 @@ export function requestFromWorkspace(
   return {
     ...request,
     workspaceId: workspace.id,
+    customerId: workspace.customerId,
     job: {
       ...request.job,
       customer: customer.customerName,

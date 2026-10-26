@@ -12,7 +12,9 @@ import {
 import type { ChangeRequest, JobEntry, RequestSummary } from "../types";
 import type { CustomerSummary } from "../crm/types";
 import CustomerDetail from "../components/crm/CustomerDetail";
+import { requestBelongsToRecord } from "../services/recordRequests";
 import { customerIdForPick } from "../services/customerDirectory";
+import { listDrafts, type RequestDraft } from "../services/requestDrafts";
 import type { Workspace, WorkspaceRow, DocumentRow } from "../workspaces/types";
 import {
   requestFromWorkspace,
@@ -92,6 +94,7 @@ export default function JobWorkspace({
   customers = [],
   onNewRequest,
   onOpenRequest,
+  onResumeDraft,
   onBack,
 }: {
   id: string;
@@ -100,6 +103,7 @@ export default function JobWorkspace({
   customers?: CustomerSummary[];
   onNewRequest: (request: ChangeRequest) => void;
   onOpenRequest: (id: string) => void;
+  onResumeDraft: (draft: RequestDraft) => void;
   onBack: () => void;
 }) {
   const packetSelectId = useId();
@@ -125,6 +129,14 @@ export default function JobWorkspace({
   const current = useRef<Workspace | null>(null);
   const [row, setRow] = useState<WorkspaceRow>();
   const [documents, setDocuments] = useState<DocumentRow[]>([]);
+  const [drafts, setDrafts] = useState<RequestDraft[]>([]);
+  useEffect(() => {
+    let active = true;
+    const read = () => void listDrafts().then(rows => { if (active) setDrafts(rows); }).catch(() => undefined);
+    read();
+    window.addEventListener("request-drafts-changed", read);
+    return () => { active = false; window.removeEventListener("request-drafts-changed", read); };
+  }, []);
   const [tab, setTab] = useState<Tab>("overview");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -428,7 +440,10 @@ export default function JobWorkspace({
     // Each new request starts from every earlier change order on this job,
     // not from a single “last amount” that would lose older corrections.
     const prior = await priorChangesFrom(
-      requests.filter((request) => request.workspaceId === id),
+      requests.filter(request => requestBelongsToRecord(request, {
+        id, jobNumber: current.current!.record.customer.jobNumber,
+        name: current.current!.record.customer.customerName, address: current.current!.record.customer.lossAddress,
+      })),
       openRequest,
       frozen.previousChanges,
     );
@@ -457,7 +472,16 @@ export default function JobWorkspace({
     );
   const data = workspace.record;
   const overviewCustomerId = workspace.customerId || customerIdForPick(undefined, customers, data.customer.customerName);
-  const related = requests.filter((request) => request.workspaceId === id);
+  const related = requests.filter(request => requestBelongsToRecord(request, {
+        id, jobNumber: current.current!.record.customer.jobNumber,
+        name: current.current!.record.customer.customerName, address: current.current!.record.customer.lossAddress,
+      }));
+  const relatedDrafts = drafts.filter(draft => !draft.submission && requestBelongsToRecord({
+    workspaceId: draft.values.initialRequest?.workspaceId,
+    job: { jobNumber: draft.values.selectedJob?.jobNumber || "",
+      customer: draft.values.selectedJob?.customer || draft.values.customerText,
+      address: draft.values.selectedJob?.address || "" },
+  }, { id, jobNumber: data.customer.jobNumber, name: data.customer.customerName, address: data.customer.lossAddress }));
   const missing = getMissingJobFields(data);
   const pending = row?.dirty || row?.inFlight;
   const status = deviceSaving
@@ -597,12 +621,48 @@ export default function JobWorkspace({
           </button>
         ))}
       </nav>
-      {tab === "overview" && (overviewCustomerId ? <CustomerDetail
+      {tab === "overview" && <>
+        <section className="workspace-panel job-dashboard" aria-label="Job dashboard">
+          <div className="workspace-panel-heading">
+            <div><p className="workspace-eyebrow">Customer & job dashboard</p><h2>{data.customer.customerName || "New job"}</h2>
+              <p>{[data.customer.jobNumber, data.customer.lossAddress].filter(Boolean).join(" · ")}</p></div>
+            <button className="button primary" disabled={!!busy || deviceSaving}
+              onClick={() => void action("Opening request…", newRequest)}><Plus size={17} />New change request</button>
+          </div>
+          <div className="job-dashboard-stats">
+            <button onClick={() => setTab("requests")}><strong>{related.length}</strong><span>Changes</span></button>
+            <button onClick={() => setTab("requests")}><strong>{related.filter(request => request.status !== "completed").length}</strong><span>Open changes</span></button>
+            <button onClick={() => setTab("documents")}><strong>{documents.length}</strong><span>Saved job documents</span></button>
+            <button onClick={() => setTab("documents")}><strong>{related.reduce((sum, request) => sum + request.attachmentsCount, 0)}</strong><span>Request files & PDFs</span></button>
+          </div>
+          {relatedDrafts.length > 0 && <section aria-label="Draft requests on this device">
+            <h3>Draft requests on this device</h3>
+            {relatedDrafts.map(draft => <button className="workspace-list-row" key={draft.id} onClick={() => onResumeDraft(draft)}>
+              <FileText size={20} /><span><strong>{draft.values.note || "Unfinished change request"}</strong><small>Saved on this device</small></span><span>Resume draft →</span>
+            </button>)}
+          </section>}
+          <h3>Recent changes</h3>
+          {related.length ? [...related].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 5).map(request =>
+            <button className="workspace-list-row" key={request.id} onClick={() => onOpenRequest(request.id)}>
+              <FileText size={20} /><span><strong>{request.job.orderNumber || "Change request"}</strong>
+                <small>{request.status.replaceAll("_", " ")} · {request.estimatorName || "Unassigned"} · {request.attachmentsCount} files</small></span><span>Open →</span>
+            </button>) : <p>No changes yet. Start a change request and it will appear here.</p>}
+          <h3>Documents</h3>
+          {documents.slice(0, 4).map(file => <button className="workspace-list-row" key={file.document.id}
+            onClick={() => void action("Opening saved PDF…", async () => {
+              const blob = await fetchJobDocument(file.document);
+              setPreview({ name: file.document.name, bytes: new Uint8Array(await blob.arrayBuffer()), spans: [] });
+            })}><FileText size={20} /><span><strong>{file.document.name}</strong><small>{file.pending ? "Saved on device · sync queued" : "Saved job document"}</small></span><span>View →</span></button>)}
+          {!documents.length && <p>No job documents saved yet.</p>}
+          <button className="button" onClick={() => setTab("documents")}>Open documents</button>
+        </section>
+        {(overviewCustomerId ? <CustomerDetail
         key={overviewCustomerId}
         id={overviewCustomerId}
         embedded
         workspaceId={workspace.id}
         contactOverride={data.customer}
+        requestSummaries={requests}
         onBack={onBack}
         onOpenRequest={onOpenRequest}
         onEditContact={() => { setTab("details"); setFocusField("customer-customerName"); }}
@@ -612,6 +672,7 @@ export default function JobWorkspace({
         {data.customer.email && <p><a href={`mailto:${data.customer.email}`}>{data.customer.email}</a></p>}
         <button className="button" onClick={() => setTab("details")}>Edit job details</button>
       </section>)}
+      </>}
       {tab === "details" && (
         <div className="workspace-form">
           <Section title="Customer & Property" open>
@@ -1008,6 +1069,14 @@ export default function JobWorkspace({
                 </button>
               </article>
             </div>
+          </section>
+          <section className="workspace-panel" aria-label="Change order documents">
+            <h2>Change order documents &amp; request files</h2>
+            <p>Open a request to view its uploaded estimates, photos, and saved customer change-order PDF.</p>
+            {related.length ? related.map(request => <button className="workspace-list-row" key={request.id} onClick={() => onOpenRequest(request.id)}>
+              <FileText size={20} /><span><strong>{request.job.orderNumber || "Change request"}</strong>
+                <small>{request.status.replaceAll("_", " ")} · {request.attachmentsCount} files</small></span><span>View files →</span>
+            </button>) : <p>No change order files yet.</p>}
           </section>
           <section className="workspace-panel">
             <h2>Saved document history</h2>

@@ -140,8 +140,10 @@ test.beforeEach(async ({ page }) => {
 test("customer directory: create, timeline, tasks, and merge", async ({ page }) => {
   await page.goto("/#/customers");
   await expect(
-    page.getByRole("heading", { name: "Customers", exact: true }),
+    page.getByRole("heading", { name: "Jobs & Customers", exact: true }),
   ).toBeVisible();
+
+  await page.getByText("Manage customer contacts & follow-ups", { exact: true }).click();
 
   // Create the first customer.
   await page.getByRole("button", { name: "New customer", exact: true }).click();
@@ -154,11 +156,11 @@ test("customer directory: create, timeline, tasks, and merge", async ({ page }) 
     .click();
 
   await expect(
-    page.getByRole("button", { name: /Acme Roofing/ }),
+    page.locator(".crm-list").getByRole("button", { name: /Acme Roofing/ }),
   ).toBeVisible();
 
   // Open the detail page.
-  await page.getByRole("button", { name: /Acme Roofing/ }).click();
+  await page.locator(".crm-list").getByRole("button", { name: /Acme Roofing/ }).click();
   await expect(
     page.getByRole("heading", { name: "Acme Roofing", exact: true }),
   ).toBeVisible();
@@ -197,6 +199,7 @@ test("customer directory: create, timeline, tasks, and merge", async ({ page }) 
   await page
     .getByRole("button", { name: "Back to customers", exact: true })
     .click();
+  await page.getByText("Manage customer contacts & follow-ups", { exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Customers", exact: true }),
   ).toBeVisible();
@@ -206,11 +209,11 @@ test("customer directory: create, timeline, tasks, and merge", async ({ page }) 
     .getByRole("button", { name: "Create customer", exact: true })
     .click();
   await expect(
-    page.getByRole("button", { name: /Beta Plumbing/ }),
+    page.locator(".crm-list").getByRole("button", { name: /Beta Plumbing/ }),
   ).toBeVisible();
 
   // Open Acme and merge Beta into it.
-  await page.getByRole("button", { name: /Acme Roofing/ }).click();
+  await page.locator(".crm-list").getByRole("button", { name: /Acme Roofing/ }).click();
   await expect(
     page.getByRole("heading", { name: "Acme Roofing", exact: true }),
   ).toBeVisible();
@@ -229,8 +232,9 @@ test("customer directory: create, timeline, tasks, and merge", async ({ page }) 
   await page
     .getByRole("button", { name: "Back to customers", exact: true })
     .click();
+  await page.getByText("Manage customer contacts & follow-ups", { exact: true }).click();
   await expect(
-    page.getByRole("button", { name: /Acme Roofing/ }),
+    page.locator(".crm-list").getByRole("button", { name: /Acme Roofing/ }),
   ).toBeVisible();
-  await expect(page.getByRole("button", { name: /Beta Plumbing/ })).toHaveCount(0);
+  await expect(page.locator(".crm-list").getByRole("button", { name: /Beta Plumbing/ })).toHaveCount(0);
 });

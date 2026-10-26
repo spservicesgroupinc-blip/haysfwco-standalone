@@ -362,3 +362,10 @@
     min-height: 44px;
   }
 }
+
+.job-dashboard-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; margin: 1.25rem 0; }
+.job-dashboard-stats button { display: flex; flex-direction: column; align-items: flex-start; gap: .35rem; padding: 1rem; border: 1px solid var(--border, #cbd5e1); border-radius: 12px; background: var(--surface, #fff); color: inherit; text-align: left; cursor: pointer; }
+.job-dashboard-stats strong { font-size: 1.8rem; line-height: 1.2; }
+.job-dashboard-stats span { font-size: .85rem; }
+.job-dashboard h3 { margin-top: 1.4rem; }
+@media (max-width: 640px) { .job-dashboard-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

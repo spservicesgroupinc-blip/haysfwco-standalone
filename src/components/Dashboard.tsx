@@ -35,6 +35,7 @@ export interface DashboardProps {
   onOpenCustomers: () => void;
   onOpenCustomer: (id: string) => void;
   onOpenJobs: () => void;
+  onOpenJob?: (job: JobEntry) => void;
 }
 
 function timestamp(value?: string): number {
@@ -73,6 +74,7 @@ export default function Dashboard({
   onOpenCustomers,
   onOpenCustomer,
   onOpenJobs,
+  onOpenJob,
 }: DashboardProps) {
   const [customers, setCustomers] = useState<CustomerSummary[]>();
 
@@ -354,7 +356,7 @@ export default function Dashboard({
           <div className="dash-card-body">
             {recentJobs.length ? (
               recentJobs.map((job) => (
-                <div className="dash-row is-static" key={job.id}>
+                <button type="button" className="dash-row" key={job.id} onClick={() => onOpenJob ? onOpenJob(job) : onOpenJobs()}>
                   <span className="dash-row-main">
                     <strong>{job.customer || "Unnamed job"}</strong>
                     <small>
@@ -367,7 +369,7 @@ export default function Dashboard({
                   <time dateTime={job.dateInspected || job.startDate || job.updatedAt}>
                     {shortDate(job.dateInspected || job.startDate || job.updatedAt)}
                   </time>
-                </div>
+                </button>
               ))
             ) : (
               <p className="dash-empty">Import a job report to see recent jobs.</p>

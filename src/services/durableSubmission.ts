@@ -1,5 +1,7 @@
 import { newId, type ChangeRequest } from "../types";
 import { API_URL, blobToBase64, saveRequest, sendRequestEmail, uploadAttachment } from "./storage";
+import { ensureRequestWorkspace } from "./requestWorkspace";
+import { flushWorkspace } from "./workspaces";
 import { preparePhotoForUpload } from "./photoUpload";
 import { readDraft, saveDraft, deleteDraft, type RequestDraft } from "./requestDrafts";
 
@@ -13,6 +15,7 @@ const defaultApi: SubmissionApi = {save: saveRequest, upload: uploadAttachment, 
 /** Freeze identities and original bytes before returning to the request queue. */
 export async function queueDraftSubmission(draft: RequestDraft, request: ChangeRequest) {
   if (draft.submission) throw new Error("This draft already has a pending submission. Resume it from Requests.");
+  request = await ensureRequestWorkspace(request);
   const row: RequestDraft = {...draft, submission: {
     request, saveMutation: newId(), attachMutation: newId(), email: "idle",
     uploads: [
@@ -34,7 +37,9 @@ export function runDraftSubmission(id: string, scope = API_URL, api = defaultApi
     if (!row?.submission) return "Submission already finished. Refresh the request queue to view it.";
     const step = row.submission;
     const persist = () => saveDraft({...row, updatedAt:new Date().toISOString()});
-    if (!step.saved) { step.saved = await api.save(step.request,step.request.revision,step.saveMutation); await persist(); }
+    if (!step.saved) {
+      if (step.request.workspaceId) await flushWorkspace(step.request.workspaceId);
+      step.saved = await api.save(step.request,step.request.revision,step.saveMutation); await persist(); }
     for (const file of step.uploads) {
       if (file.uploaded) continue;
       if (!file.prepared) {

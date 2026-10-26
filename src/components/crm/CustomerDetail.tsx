@@ -1,3 +1,4 @@
+import type { RequestSummary } from "../../types";
 import { useCallback, useEffect, useState } from "react";
 import {
   Briefcase,
@@ -40,9 +41,9 @@ import type {
 import {
   cachedWorkspaces,
   subscribeWorkspaces,
-  saveWorkspaceLocally,
 } from "../../services/workspaces";
-import { workspaceFromDirectory } from "../../workspaces/model";
+import { openUnifiedRecord, unifiedRecords } from "../../services/unifiedRecords";
+import { requestBelongsToRecord } from "../../services/recordRequests";
 import { cachedRequests, cachedJobDirectory } from "../../services/storage";
 import { customerNameKey } from "../../services/customerDirectory";
 import type { ChangeRequest, JobEntry, RequestStatus } from "../../types";
@@ -77,9 +78,10 @@ export interface CustomerDetailProps {
   workspaceId?: string;
   onEditContact?: () => void;
   contactOverride?: CustomerData;
+  requestSummaries?: RequestSummary[];
 }
 
-export default function CustomerDetail({ id, onBack, onOpenWorkspace, onOpenRequest, embedded = false, workspaceId, onEditContact, contactOverride }: CustomerDetailProps) {
+export default function CustomerDetail({ id, onBack, onOpenWorkspace, onOpenRequest, embedded = false, workspaceId, onEditContact, contactOverride, requestSummaries }: CustomerDetailProps) {
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -228,9 +230,10 @@ export default function CustomerDetail({ id, onBack, onOpenWorkspace, onOpenRequ
     if (!onOpenWorkspace || busy) return;
     setBusy(true);
     try {
-      const workspace = workspaceFromDirectory(entry);
-      workspace.customerId = id;
-      await saveWorkspaceLocally(workspace);
+      const record = unifiedRecords(await cachedWorkspaces(), [entry], customers).find(record =>
+        record.jobNumber.trim().toUpperCase() === entry.jobNumber.trim().toUpperCase());
+      if (!record) throw new Error("This job could not be found. Reload and try again.");
+      const workspace = await openUnifiedRecord({ ...record, customerId: id });
       onOpenWorkspace(workspace.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -271,10 +274,13 @@ export default function CustomerDetail({ id, onBack, onOpenWorkspace, onOpenRequ
   // New change orders carry the customer id; older ones are matched by name so
   // a customer's history is complete the first time they are opened.
   const customerKey = customerNameKey(customer.name);
-  const linkedRequests = requests
+  const linkedRequests = (requestSummaries ?? requests)
     .filter(
       (request) =>
-        workspaceId ? request.workspaceId === workspaceId : request.customerId === id ||
+        workspaceId ? requestBelongsToRecord(request, {
+          id: workspaceId, jobNumber: contactOverride?.jobNumber || "",
+          name: contactOverride?.customerName || customer.name, address: contactOverride?.lossAddress || customer.address || "",
+        }) : request.customerId === id ||
         (!request.customerId &&
           customerKey &&
           customerNameKey(request.job?.customer) === customerKey),

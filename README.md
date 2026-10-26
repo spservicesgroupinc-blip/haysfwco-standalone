@@ -57,8 +57,11 @@ The parser supports positioned Final Draft tables, wrapped descriptions, repeate
 
 ## Customers (CRM)
 
-The **Customers** tab (`#/customers`) is a lightweight CRM built on a dedicated
-customer record, separate from the replaceable jobs directory:
+**Customers** and **Jobs & Documents** open the same searchable **Jobs & Customers** directory. CSV rows, saved jobs, and customer contacts open permanent job dashboards with changes, job PDFs, request files, contact details, activity, and follow-ups. Selecting an uploaded job in Quick Request starts its workspace automatically; device drafts can be resumed from the dashboard. New requests retain both job and customer links. Matching older requests appear by job number without rewriting their saved contents.
+
+The uploaded CSV can be replaced without deleting saved job dashboards or document history. A customer may have multiple jobs; each job number retains its own changes and documents. **Manage customer contacts & follow-ups** opens the existing customer management tools. See [dashboard behavior](docs/customer-job-dashboard.md).
+
+Customer management includes:
 
 - Searchable customer directory with job count and open-task count.
 - Customer detail (`#/customers/:id`) with linked jobs (and their lifecycle

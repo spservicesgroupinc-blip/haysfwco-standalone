@@ -76,12 +76,13 @@ const JobsDocuments = lazy(() => import("./documents/JobsDocuments"));
 const RequestWorkspaceLink = lazy(
   () => import("./documents/RequestWorkspaceLink"),
 );
-import { startCrmSync, syncCustomersFromJobs } from "./crm";
+import { openUnifiedRecord, unifiedRecords } from "./services/unifiedRecords";
+import { cachedWorkspaces, refreshWorkspaces } from "./services/workspaces";
+import { listCustomers, startCrmSync, syncCustomersFromJobs } from "./crm";
 import { CUSTOMER_REFERENCE_CHANGED, getCachedCustomerReference, getCustomerReference } from "./documents/services/customerReferenceService";
 import type { CustomerReferenceSnapshot } from "./documents/services/customerReference";
 import { customerReferenceJobs } from "./services/customerReferenceJobs";
 import { sharedJobDirectory } from "./services/sharedJobDirectory";
-const CustomerList = lazy(() => import("./components/crm/CustomerList"));
 const CustomerDetail = lazy(() => import("./components/crm/CustomerDetail"));
 
 const STATUS_LABELS: Record<RequestStatus, string> = {
@@ -802,6 +803,14 @@ export default function App() {
             onOpenCustomers={() => goTo({ kind: "customers" })}
             onOpenCustomer={(id) => goTo({ kind: "customer", id })}
             onOpenJobs={() => goTo({ kind: "workspaces" })}
+            onOpenJob={(entry) => {
+              void (async () => {
+                await refreshWorkspaces();
+                const record = unifiedRecords(await cachedWorkspaces(), [entry], await listCustomers())
+                  .find(record => record.jobNumber.trim().toUpperCase() === entry.jobNumber.trim().toUpperCase());
+                if (record) goTo({ kind: "workspace", id: (await openUnifiedRecord(record)).id });
+              })().catch(error => setHomeNotice(error instanceof Error ? error.message : String(error)));
+            }}
           />
         </main>
       ) : view.kind === "simple" ? (
@@ -816,7 +825,7 @@ export default function App() {
             onSubmit={submitQuickRequest}
           />
         </main>
-      ) : view.kind === "workspace" || view.kind === "workspaces" ? (
+      ) : view.kind === "workspace" || view.kind === "workspaces" || view.kind === "customers" ? (
         <main className="shell-request" ref={mainRef} tabIndex={-1}>
           <Suspense
             fallback={
@@ -832,6 +841,8 @@ export default function App() {
               jobs={jobs}
               requests={requests}
               onOpenWorkspace={(id) => goTo({ kind: "workspace", id })}
+              onOpenCustomer={(id) => goTo({ kind: "customer", id })}
+              onResumeDraft={(draft) => { goTo({ kind: "simple" }); setRequestDraft(draft); setNewRequestSeed(draft.values.initialRequest); }}
               onBack={() => goTo({ kind: "workspaces" })}
               onOpenRequest={(id) => void openRequestById(id)}
               onNewRequest={(seed) => {
@@ -920,19 +931,6 @@ export default function App() {
               <p>Loading request…</p>
             </div>
           )}
-        </main>
-      ) : view.kind === "customers" ? (
-        <main className="shell-request" ref={mainRef} tabIndex={-1}>
-          <Suspense
-            fallback={
-              <div className="empty">
-                <div className="spinner" />
-                <p>Loading customers…</p>
-              </div>
-            }
-          >
-            <CustomerList onOpen={(id) => goTo({ kind: "customer", id })} />
-          </Suspense>
         </main>
       ) : view.kind === "customer" ? (
         <main className="shell-request" ref={mainRef} tabIndex={-1}>

@@ -41,6 +41,8 @@ test("customer overview presents contacts, jobs and follow-ups on desktop and ph
   await page.setViewportSize({ width: 320, height: 740 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.getByRole("button", { name: "Open job FW-26-1053", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Job dashboard", exact: true })).toBeVisible();
+  await page.getByRole("navigation", { name: "Job sections" }).getByRole("button", { name: "Job Details", exact: true }).click();
   await expect(page.getByRole("textbox", { name: "Job number*", exact: true })).toHaveValue("FW-26-1053");
   expect(errors).toEqual([]);
 });

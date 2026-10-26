@@ -46,6 +46,7 @@ import CopyDashNote from "./CopyDashNote";
 import { formatDashNote } from "../services/dashNote";
 import { contractAmounts } from "../services/contract";
 import { type RequestDraft } from "../services/requestDrafts";
+import { ensureRequestWorkspace } from "../services/requestWorkspace";
 import { queueDraftSubmission, runDraftSubmission } from "../services/durableSubmission";
 import { useRequestDraft } from "./useRequestDraft";
 import "./SimpleRequest.css";
@@ -387,8 +388,23 @@ export default function SimpleRequest(
   );
   const draftPhotos=useMemo(()=>photos.map(photo=>({id:photo.id,name:photo.file.name,type:photo.blob.type,lastModified:photo.file.lastModified,blob:photo.blob,edited:photo.edited})),[photos]);
   const draftPdf=useMemo(()=>pdf ? {name:pdf.name,type:pdf.type,lastModified:pdf.lastModified,blob:pdf} : null,[pdf]);
+  const [selectionRecord, setSelectionRecord] = useState<{ jobId: string; request: ChangeRequest }>();
+  useEffect(() => {
+    if (!selectedJob || selectedJob.id === `workspace-${initialRequest?.workspaceId}`) return;
+    let active = true;
+    const seed = buildRequest(null, { job: selectedJob, customer: selectedJob.customer,
+      customerId: linkedCustomerId, note: "" });
+    void ensureRequestWorkspace(seed).then(request => {
+      if (active) setSelectionRecord({ jobId: selectedJob.id, request });
+    }).catch(() => undefined); // Submission retries the lookup and displays any connection error.
+    return () => { active = false; };
+  }, [selectedJob?.id, initialRequest?.workspaceId]);
+  const linkedSeed = selectionRecord?.jobId === selectedJob?.id ? selectionRecord?.request : undefined;
+  const matchingInitialSeed = initialRequest && (!selectedJob || selectedJob.id === `workspace-${initialRequest.workspaceId}` ||
+    (selectedJob.jobNumber.trim() && selectedJob.jobNumber.trim().toUpperCase() === initialRequest.job.jobNumber.trim().toUpperCase()))
+    ? initialRequest : undefined;
   const draft = useRequestDraft(draftId, {
-    customerText, selectedJob, initialRequest, note, requestType, customerCredits, amount, amountSign, emailAddress,
+    customerText, selectedJob, initialRequest: linkedSeed || matchingInitialSeed, note, requestType, customerCredits, amount, amountSign, emailAddress,
     photos:photos.map(photo=>({id:photo.id,name:photo.file.name,type:photo.blob.type,lastModified:photo.file.lastModified,blob:photo.blob,edited:photo.edited})),
     pdf:pdf ? {name:pdf.name,type:pdf.type,lastModified:pdf.lastModified,blob:pdf} : null,
   }, submissionStarted, props.onLeaveGuard);
@@ -635,6 +651,10 @@ export default function SimpleRequest(
         prior,
       });
       request.id = draftId;
+      if (linkedSeed?.workspaceId) {
+        request.workspaceId = linkedSeed.workspaceId;
+        request.customerId ||= linkedSeed.customerId;
+      }
       await queueDraftSubmission(snapshot, request);
       onSubmit(() => runDraftSubmission(draftId));
     } catch (error) {

@@ -1,4 +1,9 @@
 import "fake-indexeddb/auto";
+import { ensureRequestWorkspace } from "../src/services/requestWorkspace";
+import { cachedWorkspace, saveWorkspaceLocally } from "../src/services/workspaces";
+import { mockBackend } from "./helpers/backend";
+const backend = mockBackend();
+globalThis.fetch = async (_url, init) => new Response(JSON.stringify(backend.post(JSON.parse(String(init?.body || "{}")))), { headers: { "Content-Type": "application/json" } });
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createRequest } from "../src/services/requests";
@@ -22,6 +27,8 @@ test("interrupted uploads reuse identities and confirmed save steps", async () =
   const request=createRequest();request.job.customer="York";
   await queueDraftSubmission(row,request);
   const prepared=(await readDraft(row.id,row.scope))!;
+  assert.ok(prepared.submission?.request.workspaceId);
+  assert.ok(prepared.submission?.request.customerId);
   for(const file of prepared.submission!.uploads) file.prepared={name:file.source.name,mimeType:file.source.type,size:file.source.blob.size,kind:file.kind,data:"dGVzdA=="};
   await saveDraft(prepared);
   let saves=0,fail=true; const ids:string[]=[];
@@ -49,4 +56,22 @@ test("storage failure rejects the draft save",async()=>{
   const original=IDBDatabase.prototype.transaction;
   IDBDatabase.prototype.transaction=function(){throw new Error("Storage full");};
   try{await assert.rejects(saveDraft(draft("quota")),/Storage full/);}finally{IDBDatabase.prototype.transaction=original;}
+});
+
+
+test("new requests reuse their job dashboard and preserve saved customer corrections", async () => {
+  const first = createRequest();
+  Object.assign(first.job, { customer: "Linked Customer", jobNumber: "FW-REUSE-1", address: "CSV address", originalContract: "100.00" });
+  const linked = await ensureRequestWorkspace(first);
+  const stored = (await cachedWorkspace(linked.workspaceId!))!;
+  const corrected = structuredClone(stored.workspace);
+  corrected.record.customer.lossAddress = "Saved correction";
+  await saveWorkspaceLocally(corrected, stored.workspace);
+  const second = createRequest();
+  second.job = { ...first.job, jobNumber: " fw-reuse-1 " };
+  const next = await ensureRequestWorkspace(second);
+  assert.equal(next.workspaceId, linked.workspaceId);
+  assert.equal(next.customerId, linked.customerId);
+  assert.equal((await cachedWorkspace(next.workspaceId!))?.workspace.record.customer.lossAddress, "Saved correction");
+  assert.equal(next.job.address, "CSV address");
 });

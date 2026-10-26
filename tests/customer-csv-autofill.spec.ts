@@ -81,12 +81,27 @@ for (const entrypoint of ["reference", "jobs"]) {
       projectManager: "CSV Foreperson", branchContact: "CSV Estimator",
       carrier: "CSV Carrier", claim: "CLAIM-AUTO-1",
     });
+    expect(submitted.workspaceId).toBeTruthy();
+    expect(submitted.customerId).toBeTruthy();
     await page.goto(`/#/requests/${submitted.id}`);
     await page.getByRole("button", { name: "Edit request", exact: true }).click();
     await expect(page.getByLabel("Original contract amount", { exact: true })).toHaveValue("1234.56");
     await page.goto("/#/workspaces");
-    await page.getByRole("button", { name: "New job", exact: true }).click();
-    await page.getByRole("textbox", { name: "Job number*", exact: true }).fill("FW-AUTO-1");
+    await expect(page.locator(".workspace-list-row").filter({ hasText: "FW-AUTO-1" })).toHaveCount(1);
+    await page.locator(".workspace-list-row").filter({ hasText: "FW-AUTO-1" }).click();
+    await expect(page).toHaveURL(new RegExp(submitted.workspaceId));
+    await expect(page.getByRole("region", { name: "Job dashboard", exact: true })).toContainText("Recent changes");
+    await expect(page.locator(".job-dashboard-stats").getByRole("button", { name: "1 Changes", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Open documents", exact: true }).click();
+    await expect(page.getByRole("region", { name: "Change order documents", exact: true })).toContainText("CO-01");
+    const welcome = page.locator(".workspace-document-card").filter({ has: page.getByRole("heading", { name: "Customer Welcome Letter", exact: true }) });
+    await welcome.getByRole("button", { name: "Save to job", exact: true }).click();
+    await expect(page.locator(".workspace-panel").filter({ has: page.getByRole("heading", { name: "Saved document history", exact: true }) })).toContainText("Welcome");
+    await page.reload();
+    await expect(page.getByRole("region", { name: "Job dashboard", exact: true })).toContainText("Welcome");
+    await page.screenshot({ path: `tmp/record-dashboard-${entrypoint}.png`, fullPage: true });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.getByRole("navigation", { name: "Job sections" }).getByRole("button", { name: "Job Details", exact: true }).click();
     await expect(page.getByLabel("Main phone", { exact: true })).toHaveValue("260-555-0123");
     await expect(page.getByLabel("Customer name", { exact: false })).toHaveValue("Automatic Customer");
     await expect(page.getByLabel("Loss address", { exact: false })).toHaveValue("100 Test St, Fort Wayne IN 46802");
@@ -94,3 +109,25 @@ for (const entrypoint of ["reference", "jobs"]) {
     expect(errors).toEqual([]);
   });
 }
+
+
+test("starting a request creates its job dashboard and the device draft resumes there", async ({ page }) => {
+  const { backend, errors } = await sandbox(page);
+  expect(backend.post({ action: "replaceCustomerReference", customers: parseCustomerCsv(csv).customers, fileName: "jobs.csv" }).ok).toBe(true);
+  await page.goto("/#/simple");
+  await page.getByRole("combobox").fill("FW-AUTO-1");
+  await page.getByLabel("What changed?", { exact: true }).fill("Unfinished request for the job dashboard");
+  await expect(page.locator(".sr-draft-status")).toContainText("Draft saved on this device");
+  await expect.poll(() => backend.post({ action: "listWorkspaces" }).workspaces.length).toBe(1);
+  const workspaceId = backend.post({ action: "listWorkspaces" }).workspaces[0].id;
+  await page.goto("/#/customers");
+  await page.locator(".workspace-list-row").filter({ hasText: "FW-AUTO-1" }).click();
+  await expect(page).toHaveURL(new RegExp(workspaceId));
+  await page.getByRole("region", { name: "Draft requests on this device", exact: true }).getByRole("button").click();
+  await expect(page.getByLabel("What changed?", { exact: true })).toHaveValue("Unfinished request for the job dashboard");
+  await page.getByRole("button", { name: "Send to estimating", exact: true }).click();
+  await expect.poll(() => backend.get({ action: "listRequests" }).requests.length).toBe(1);
+  expect(backend.get({ action: "listRequests" }).requests[0].workspaceId).toBe(workspaceId);
+  expect(backend.post({ action: "listWorkspaces" }).workspaces).toHaveLength(1);
+  expect(errors).toEqual([]);
+});

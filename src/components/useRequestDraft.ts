@@ -23,7 +23,7 @@ export function useRequestDraft(id: string, values: DraftValues, frozen: React.M
     if(frozen.current)return;
     if(!(values.customerText||values.note||values.photos.length||values.pdf||values.amount||values.emailAddress||values.requestType||values.customerCredits))return;
     void persist().catch(()=>undefined);
-  },[id,values.customerText,values.selectedJob,values.note,values.photos,values.pdf,values.amount,values.amountSign,values.emailAddress,values.requestType,values.customerCredits]);
+  },[id,values.customerText,values.selectedJob,values.initialRequest,values.note,values.photos,values.pdf,values.amount,values.amountSign,values.emailAddress,values.requestType,values.customerCredits]);
   useEffect(()=>{
     mounted.current=true;
     const beforeUnload=(event:BeforeUnloadEvent)=>{if(saving.current||failed.current){event.preventDefault();event.returnValue="";}};

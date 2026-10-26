@@ -1,12 +1,9 @@
 import { useEffect, useState } from "react";
-import { FileText, Plus, Search, Upload } from "lucide-react";
+import { FileText, Plus, Search } from "lucide-react";
 import type { ChangeRequest, JobEntry, RequestSummary } from "../types";
+import type { RequestDraft } from "../services/requestDrafts";
 import type { WorkspaceRow } from "../workspaces/types";
-import {
-  createWorkspace,
-  normalizeJobNumber,
-  workspaceFromDirectory,
-} from "../workspaces/model";
+import { createWorkspace } from "../workspaces/model";
 import {
   cachedWorkspaces,
   refreshWorkspaces,
@@ -18,18 +15,15 @@ import { importWorkspaceLocally } from "../workspaces/importStore";
 import {
   listCustomers,
   subscribeCrm,
-  syncCustomersFromJobs,
   type CustomerSummary,
 } from "../crm";
-import {
-  customerIdForPick,
-  customerIdOfOption,
-  customerOptions,
-} from "../services/customerDirectory";
+import { customerOptions } from "../services/customerDirectory";
+import CustomerList from "../components/crm/CustomerList";
 import JobWorkspace from "./JobWorkspace";
+import { unifiedRecords, openUnifiedRecord, type UnifiedRecord } from "../services/unifiedRecords";
+import { requestBelongsToRecord } from "../services/recordRequests";
 import { CustomerImportPage } from "./components/CustomerImportPage";
 import WorkspaceMigration from "./WorkspaceMigration";
-import { DirectoryJobPicker } from "./components/DirectoryJobPicker";
 import "./workspace.css";
 import "./documents.css";
 
@@ -39,6 +33,8 @@ export default function JobsDocuments({
   jobs,
   requests,
   onOpenWorkspace,
+  onOpenCustomer,
+  onResumeDraft,
   onNewRequest,
   onOpenRequest,
   onBack,
@@ -48,6 +44,8 @@ export default function JobsDocuments({
   jobs: JobEntry[];
   requests: RequestSummary[];
   onOpenWorkspace: (id: string) => void;
+  onOpenCustomer: (id: string) => void;
+  onResumeDraft: (draft: RequestDraft) => void;
   onNewRequest: (request: ChangeRequest) => void;
   onOpenRequest: (id: string) => void;
   onBack: () => void;
@@ -100,44 +98,24 @@ export default function JobsDocuments({
     };
   }, []);
 
-  async function create(entry?: JobEntry) {
+  async function create() {
     setBusy(true);
     setError("");
     try {
-      if (entry) {
-        const matches = rows.filter(
-          (row) =>
-            normalizeJobNumber(row.workspace.record.customer.jobNumber) ===
-            normalizeJobNumber(entry.jobNumber),
-        );
-        if (entry.jobNumber.trim() && matches.length === 1) {
-          onOpenWorkspace(matches[0].workspace.id);
-          return;
-        }
-        if (entry.jobNumber.trim() && matches.length > 1)
-          throw new Error(
-            "More than one saved job uses this number. Open the correct saved job below.",
-          );
-      }
-      const workspace = entry
-        ? workspaceFromDirectory(entry)
-        : createWorkspace();
-      if (entry)
-        workspace.customerId = customerIdForPick(
-          entry,
-          customers,
-          entry.customer,
-        );
+      const workspace = createWorkspace();
       await saveWorkspaceLocally(workspace);
-      // Opening a job from the directory registers its customer and links it.
-      if (entry && !customerIdOfOption(entry.id))
-        await syncCustomersFromJobs([entry], true).catch(() => undefined);
       onOpenWorkspace(workspace.id);
     } catch (value) {
       setError(value instanceof Error ? value.message : String(value));
-    } finally {
-      setBusy(false);
-    }
+    } finally { setBusy(false); }
+  }
+
+  async function openRecord(record: UnifiedRecord) {
+    setBusy(true);
+    setError("");
+    try { onOpenWorkspace((await openUnifiedRecord(record)).id); }
+    catch (value) { setError(value instanceof Error ? value.message : String(value)); }
+    finally { setBusy(false); }
   }
 
   if (workspaceId)
@@ -150,30 +128,30 @@ export default function JobsDocuments({
         customers={customers}
         onNewRequest={onNewRequest}
         onOpenRequest={onOpenRequest}
+        onResumeDraft={onResumeDraft}
         onBack={onBack}
       />
     );
   const query = search.trim().toLowerCase();
-  const visible = rows
+  const records = unifiedRecords(rows, jobs, customers);
+  const visible = records
     .filter((row) =>
       [
-        row.workspace.record.customer.customerName,
-        row.workspace.record.customer.jobNumber,
-        row.workspace.record.customer.lossAddress,
+        row.name, row.jobNumber, row.address, row.phone, row.email,
       ]
         .join(" ")
         .toLowerCase()
         .includes(query),
     )
-    .sort((a, b) => b.workspace.updatedAt.localeCompare(a.workspace.updatedAt));
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   return (
     <div className="documents-workspace jobs-documents">
       <div className="workspace-title">
         <div>
-          <p className="workspace-eyebrow">Shared job workspace</p>
-          <h1>Jobs & Documents</h1>
+          <p className="workspace-eyebrow">Customer & job directory</p>
+          <h1>Jobs & Customers</h1>
           <p>
-            Job details, production documents, and change requests together.
+            Open a dashboard for job details, changes, documents, and follow-ups.
           </p>
         </div>
         <button
@@ -228,7 +206,7 @@ export default function JobsDocuments({
           <label className="workspace-search">
             <Search size={18} />
             <input
-              aria-label="Search saved jobs"
+              aria-label="Search jobs and customers"
               placeholder="Search customer, job number, or address"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
@@ -236,61 +214,36 @@ export default function JobsDocuments({
           </label>
           <section className="workspace-panel">
             <h2>
-              Saved jobs <span className="workspace-count">{rows.length}</span>
+              All jobs &amp; customers <span className="workspace-count">{records.length}</span>
             </h2>
             {visible.length ? (
-              visible.map((row) => (
-                <button
-                  className="workspace-list-row"
-                  key={row.workspace.id}
-                  onClick={() => onOpenWorkspace(row.workspace.id)}
-                >
-                  <FileText size={22} />
-                  <span>
-                    <strong>
-                      {row.workspace.record.customer.customerName ||
-                        "Untitled job"}
-                    </strong>
-                    <small>
-                      {[
-                        row.workspace.record.customer.jobNumber,
-                        row.workspace.record.customer.lossAddress,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ") || "Job details in progress"}
-                    </small>
-                    <small>
-                      {row.conflict
-                        ? "Conflicting edits need review"
-                        : row.error
-                          ? "Sync needs attention · device copy saved"
-                          : row.dirty || row.inFlight
-                            ? "Saved on device · sync queued"
-                            : "Saved to shared workspace"}
-                    </small>
-                  </span>
-                  <span>Open →</span>
-                </button>
-              ))
+              visible.map(record => {
+                const changes = requests.filter(request => requestBelongsToRecord(request, {
+                  id: record.workspace?.workspace.id || "", jobNumber: record.jobNumber,
+                  name: record.name, address: record.address,
+                }));
+                const row = record.workspace;
+                return <button className="workspace-list-row" key={record.id} disabled={busy}
+                  onClick={() => void openRecord(record)}>
+                  <FileText size={22} /><span>
+                    <strong>{record.name || "Untitled job"}</strong>
+                    <small>{[record.jobNumber, record.address].filter(Boolean).join(" · ") || "Customer details in progress"}</small>
+                    <small>{record.status} · {changes.length} change{changes.length === 1 ? "" : "s"}
+                      {row?.conflict ? " · Conflicting edits need review" : row?.error ? " · Sync needs attention" : row?.dirty || row?.inFlight ? " · Saved on device" : ""}</small>
+                  </span><span>Open dashboard →</span>
+                </button>;
+              })
             ) : (
               <p>
-                {rows.length
-                  ? "No saved jobs match your search."
-                  : "Create a job or choose one from the directory below. Documents can be prepared before any change request exists."}
+                {records.length
+                  ? "No jobs or customers match your search."
+                  : "Upload your customer/job CSV in Tools or create a job to start its dashboard."}
               </p>
             )}
           </section>
-          <details className="workspace-panel directory-disclosure">
-            <summary>Start from jobs &amp; customers</summary>
-            <p>
-              Choose an imported job to start its workspace. Future directory
-              imports preserve your saved details and documents.
-            </p>
-            <DirectoryJobPicker
-              jobs={directory}
-              disabled={busy}
-              onSelect={(entry) => void create(entry)}
-            />
+          <details className="workspace-panel">
+            <summary>Manage customer contacts &amp; follow-ups</summary>
+            <CustomerList onOpen={onOpenCustomer} />
           </details>
         </>
       )}
