@@ -43,6 +43,7 @@ async function clearStores(
 }
 
 const crmSchema = (db: IDBDatabase) => {
+  if (!db.objectStoreNames.contains("outbox")) db.createObjectStore("outbox", { keyPath: "sequence", autoIncrement: true });
   if (!db.objectStoreNames.contains("customers"))
     db.createObjectStore("customers", { keyPath: "id" });
   if (!db.objectStoreNames.contains("activities"))
@@ -59,7 +60,7 @@ const workspaceSchema = (db: IDBDatabase) => {
 };
 
 async function resetDatabases(): Promise<void> {
-  await clearStores("hays-crm-v1", 1, crmSchema, ["customers", "activities", "tasks"]);
+  await clearStores("hays-crm-v1", 2, crmSchema, ["customers", "activities", "tasks", "outbox"]);
   await clearStores("hays-job-workspaces-v1", 1, workspaceSchema, ["workspaces", "documents"]);
 }
 

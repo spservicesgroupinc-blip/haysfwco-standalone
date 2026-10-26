@@ -5,13 +5,17 @@ const DATABASE = "hays-crm-v1";
 let connection: Promise<IDBDatabase> | undefined;
 function database(): Promise<IDBDatabase> {
   connection ??= new Promise((resolve, reject) => {
-    const open = indexedDB.open(DATABASE, 1);
+    const open = indexedDB.open(DATABASE, 2);
     open.onupgradeneeded = () => {
-      open.result.createObjectStore("customers", { keyPath: "id" });
-      open.result.createObjectStore("activities", { keyPath: "id" });
-      open.result.createObjectStore("tasks", { keyPath: "id" });
+      for (const name of ["customers", "activities", "tasks"])
+        if (!open.result.objectStoreNames.contains(name)) open.result.createObjectStore(name, { keyPath: "id" });
+      if (!open.result.objectStoreNames.contains("outbox"))
+        open.result.createObjectStore("outbox", { keyPath: "sequence", autoIncrement: true });
     };
-    open.onsuccess = () => resolve(open.result);
+    open.onsuccess = () => {
+      open.result.onversionchange = () => { open.result.close(); connection = undefined; };
+      resolve(open.result);
+    };
     open.onerror = () => {
       connection = undefined;
       reject(open.error);
@@ -75,6 +79,80 @@ const emit = () => {
   listeners.forEach((listener) => listener());
   channel?.postMessage("changed");
 };
+
+export type CrmMutation = (
+  | { kind: "customer"; entity: Customer; expectedRevision: number }
+  | { kind: "task"; entity: Task; expectedRevision: number }
+  | { kind: "activity"; entity: Activity }
+) & { sequence?: number; mutationId: string; error?: string; conflict?: boolean };
+
+const entityStore = (kind: CrmMutation["kind"]) => kind === "customer" ? "customers" : kind === "task" ? "tasks" : "activities";
+export const pendingCrmMutations = () => read<CrmMutation[]>("outbox", store => store.getAll());
+
+/** Entity and outbox commit atomically, so a reload cannot lose the cloud save. */
+export async function stageCrmMutation(mutation: CrmMutation): Promise<void> {
+  const db = await database();
+  await new Promise<void>((resolve, reject) => {
+    const name = entityStore(mutation.kind);
+    const tx = db.transaction([name, "outbox"], "readwrite");
+    tx.objectStore(name).put(mutation.entity);
+    tx.objectStore("outbox").add(mutation);
+    tx.oncomplete = () => resolve();
+    tx.onabort = tx.onerror = () => reject(tx.error || new Error("Could not preserve the pending customer save."));
+  });
+  emit();
+}
+
+export async function acknowledgeCrmMutation(mutation: CrmMutation, saved: Customer | Task | Activity): Promise<void> {
+  const db = await database();
+  await new Promise<void>((resolve, reject) => {
+    const name = entityStore(mutation.kind);
+    const tx = db.transaction([name, "outbox"], "readwrite");
+    const outbox = tx.objectStore("outbox");
+    outbox.delete(mutation.sequence!);
+    const remaining = outbox.getAll();
+    remaining.onsuccess = () => {
+      if (!(remaining.result as CrmMutation[]).some(row => row.kind === mutation.kind && row.entity.id === mutation.entity.id))
+        tx.objectStore(name).put(saved);
+    };
+    tx.oncomplete = () => resolve();
+    tx.onabort = tx.onerror = () => reject(tx.error || new Error("Could not confirm the customer save on this device."));
+  });
+  emit();
+}
+
+export async function markCrmMutationFailed(mutation: CrmMutation, error: string, conflict: boolean): Promise<void> {
+  const db = await database();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction("outbox", "readwrite");
+    const store = tx.objectStore("outbox");
+    const current = store.get(mutation.sequence!);
+    current.onsuccess = () => { if (current.result) store.put({ ...current.result, error, conflict }); };
+    tx.oncomplete = () => resolve();
+    tx.onabort = tx.onerror = () => reject(tx.error);
+  });
+  emit();
+}
+
+/** Cloud refreshes must never replace a pending correction or a newer revision. */
+export async function cacheCrmEntity(kind: CrmMutation["kind"], entity: Customer | Task | Activity): Promise<void> {
+  const db = await database();
+  await new Promise<void>((resolve, reject) => {
+    const name = entityStore(kind);
+    const tx = db.transaction([name, "outbox"], "readwrite");
+    const pending = tx.objectStore("outbox").getAll();
+    pending.onsuccess = () => {
+      if ((pending.result as CrmMutation[]).some(row => row.kind === kind && row.entity.id === entity.id)) return;
+      const store = tx.objectStore(name);
+      const current = store.get(entity.id);
+      current.onsuccess = () => {
+        if ((current.result?.revision ?? 0) <= ((entity as Customer | Task).revision ?? 0)) store.put(entity);
+      };
+    };
+    tx.oncomplete = () => resolve();
+    tx.onabort = tx.onerror = () => reject(tx.error);
+  });
+}
 
 export const listLocalCustomers = () =>
   read<Customer[]>("customers", (store) => store.getAll());
