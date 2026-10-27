@@ -10,7 +10,15 @@ npm install
 npm run dev
 ```
 
-Open http://127.0.0.1:3010. `npm run build` creates the production site in `dist`; `npm run preview` serves that build on the same port. Requests are stored in Google Sheets and source PDFs in Google Drive through an Apps Script backend — see `docs/google-sheets-setup.md` for the one-time setup.
+Open http://localhost:3000. `npm run build` creates the production site in `dist`; `npm run preview` serves that build on the same port. Requests are stored in Google Sheets and source PDFs in Google Drive through an Apps Script backend — see `docs/google-sheets-setup.md` for the one-time setup.
+
+The layout adapts automatically to the available screen width. At 860px and below,
+Home focuses on creating requests, finding jobs, and the three most recent requests.
+Company statistics, completed requests, and customer lists expand under **Company
+overview**. Phone navigation keeps **Home**, **Requests**, **New request**, and
+**Jobs** available, with customers in the shared Jobs & Customers directory and
+imports under **Tools**. Wider screens show the full dashboard and desktop navigation.
+Both layouts use the same records and forms; resizing does not reset an open request.
 
 ## Use
 

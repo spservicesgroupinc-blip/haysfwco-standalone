@@ -265,6 +265,125 @@ button.dash-row:hover .dash-row-chevron {
   color: #929aa6;
 }
 
+.phone-home,
+.dash-overview-toggle {
+  display: none;
+}
+
+/* Use the same breakpoint as the shell navigation. Screen changes never remount a form. */
+@media (max-width: 860px) {
+  .shell-home.dash-shell {
+    padding: 20px 16px 32px;
+  }
+  .dash-head {
+    margin-bottom: 20px;
+  }
+  .dash-head h1 {
+    margin: 0;
+    font-size: 26px;
+  }
+  .dash-date,
+  .dash-sub,
+  .dash-head .button,
+  .dash-attention-detail {
+    display: none;
+  }
+  .dash-attention {
+    flex-wrap: nowrap;
+    align-items: center;
+    padding: 12px;
+    gap: 8px;
+  }
+  .dash-attention > svg {
+    flex-shrink: 0;
+  }
+  .dash-attention-link {
+    margin-left: auto;
+  }
+  .phone-home {
+    display: grid;
+    gap: 16px;
+  }
+  .phone-home .phone-home-create {
+    width: 100%;
+    min-height: 56px;
+    justify-content: flex-start;
+    font-size: 16px;
+  }
+  .phone-home-create > svg:last-child {
+    margin-left: auto;
+  }
+  .phone-home-shortcuts {
+    border: 1px solid var(--border);
+    border-radius: 11px;
+    background: var(--surface);
+    overflow: hidden;
+  }
+  .phone-home-shortcuts button {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-height: 68px;
+    padding: 12px 16px;
+    border: 0;
+    background: transparent;
+    color: var(--ink);
+    text-align: left;
+  }
+  .phone-home-shortcuts button + button {
+    border-top: 1px solid var(--border);
+  }
+  .phone-home-shortcuts button:hover {
+    background: #f8fafc;
+  }
+  .phone-home-shortcuts span {
+    display: grid;
+    gap: 4px;
+    flex: 1;
+  }
+  .phone-home-shortcuts strong {
+    font-size: 15px;
+  }
+  .phone-home-shortcuts small {
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .phone-home-recent .dash-row {
+    min-height: 64px;
+  }
+  .phone-home .dash-row-main small {
+    color: var(--muted);
+  }
+  .phone-home .text-button {
+    min-height: 44px;
+  }
+  .dash-overview-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    min-height: 48px;
+    margin: 16px 0 0;
+    padding: 12px 0;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .dash-overview-toggle[aria-expanded="true"] svg {
+    transform: rotate(180deg);
+  }
+  .dash-overview {
+    display: none;
+  }
+  .dash-overview.is-open {
+    display: block;
+    margin-top: 12px;
+  }
+}
+
 @media (max-width: 960px) {
   .dash-kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -308,12 +427,5 @@ button.dash-row:hover .dash-row-chevron {
   }
   .dash-row .dash-status {
     display: none;
-  }
-  .dash-attention {
-    align-items: flex-start;
-    flex-wrap: wrap;
-  }
-  .dash-attention-link {
-    margin-left: 29px;
   }
 }

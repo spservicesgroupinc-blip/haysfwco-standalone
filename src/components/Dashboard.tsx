@@ -3,8 +3,10 @@ import {
   ArrowRight,
   Briefcase,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
   ClipboardList,
+  Plus,
   TriangleAlert,
   X,
 } from "lucide-react";
@@ -77,6 +79,7 @@ export default function Dashboard({
   onOpenJob,
 }: DashboardProps) {
   const [customers, setCustomers] = useState<CustomerSummary[]>();
+  const [overviewOpen, setOverviewOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -201,7 +204,7 @@ export default function Dashboard({
               {plural(counts.needs_information, "change order needs", "change orders need")} more
               information.
             </strong>{" "}
-            Estimating is waiting on the project manager.
+            <span className="dash-attention-detail">Estimating is waiting on the project manager.</span>
           </span>
           <span className="dash-attention-link">
             Review <ArrowRight size={13} />
@@ -209,6 +212,47 @@ export default function Dashboard({
         </button>
       ) : null}
 
+      <section className="phone-home" aria-label="Phone home">
+        <button className="button primary phone-home-create" onClick={onNewRequest}>
+          <Plus size={21} /> New request <ArrowRight size={18} />
+        </button>
+        <div className="phone-home-shortcuts">
+          <button onClick={() => onOpenRequests("open")}>
+            <ClipboardList size={20} />
+            <span><strong>Requests</strong><small>{plural(openRequests.length, "open request")}</small></span>
+            <ChevronRight size={17} />
+          </button>
+          <button onClick={onOpenJobs}>
+            <Briefcase size={20} />
+            <span><strong>Jobs</strong><small>Find a job or document</small></span>
+            <ChevronRight size={17} />
+          </button>
+        </div>
+        <section className="dash-card phone-home-recent" aria-labelledby="phone-recent-title">
+          <div className="dash-card-head">
+            <h2 id="phone-recent-title">Recent requests</h2>
+            <button className="text-button" onClick={() => onOpenRequests("all")}>View all <ArrowRight size={13} /></button>
+          </div>
+          <div className="dash-card-body">
+            {requests.length ? [...requests]
+              .sort((a, b) => timestamp(b.updatedAt) - timestamp(a.updatedAt))
+              .slice(0, 3).map(item => (
+                <button key={item.id} className="dash-row" aria-label={`Open request ${item.job.customer || "Untitled request"} ${item.job.jobNumber}`} onClick={() => onOpenRequest(item.id)}>
+                  <span className="dash-row-main">
+                    <strong>{item.job.customer || "Untitled request"}</strong>
+                    <small>{item.job.jobNumber || "Job pending"} · {STATUS_LABELS[item.status]}</small>
+                  </span>
+                  <ChevronRight size={17} className="dash-row-chevron" />
+                </button>
+              )) : <p className="dash-empty">Your requests will appear here. Start with New request.</p>}
+          </div>
+        </section>
+      </section>
+
+      <button className="dash-overview-toggle" aria-expanded={overviewOpen} aria-controls="company-overview" onClick={() => setOverviewOpen(open => !open)}>
+        Company overview <ChevronDown size={17} />
+      </button>
+      <div id="company-overview" className={`dash-overview${overviewOpen ? " is-open" : ""}`}>
       <section className="dash-kpis" aria-label="Operations overview">
         <button type="button" className="dash-kpi" onClick={() => onOpenRequests("open")}>
           <span className="dash-kpi-label">
@@ -422,6 +466,7 @@ export default function Dashboard({
             )}
           </div>
         </section>
+      </div>
       </div>
     </div>
   );
