@@ -153,7 +153,7 @@ export async function createCustomer(input: NewCustomerInput): Promise<Customer>
   const now = new Date().toISOString();
   const customer: Customer = {
     id: crypto.randomUUID(),
-    revision: 0,
+    revision: 1,
     createdAt: now,
     updatedAt: now,
     name: input.name,

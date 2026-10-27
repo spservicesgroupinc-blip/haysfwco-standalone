@@ -9,14 +9,13 @@ import { pendingCrmMutations } from "../crm/store";
 import { syncCrm } from "../crm/sync";
 import TaskList from "../components/crm/TaskList";
 import ActivityTimeline from "../components/crm/ActivityTimeline";
+import { applyJobPlan, planOf } from "./services/jobPlan";
 import "./job-workboard.css";
 
 const stages: { value: JobStage; label: string }[] = [
   { value: "lead", label: "Lead / planning" }, { value: "in_progress", label: "In progress" },
   { value: "complete", label: "Complete" }, { value: "closed", label: "Closed" },
 ];
-const planOf = (job: Workspace) => ({ stage: job.stage || "lead", manager: job.record.team.projectManager,
-  start: job.record.checklist.startDate, finish: job.record.checklist.finishDate });
 
 export default function JobWorkboard({ workspace, customerId, onSaveWorkspace, onOpenCustomer, onEditContact }: {
   workspace: Workspace;
@@ -30,12 +29,15 @@ export default function JobWorkboard({ workspace, customerId, onSaveWorkspace, o
   const [activities, setActivities] = useState<Activity[]>([]);
   const [sync, setSync] = useState({ count: 0, error: "" });
   const [plan, setPlan] = useState(() => planOf(workspace));
+  const planBaseline = useRef(plan);
   const [editingPlan, setEditingPlan] = useState(false);
   const [linkingTask, setLinkingTask] = useState("");
   const [savingPlan, setSavingPlan] = useState(false);
   const [error, setError] = useState("");
   const creatingCustomer = useRef<Promise<string> | null>(null);
-  useEffect(() => { if (!editingPlan) setPlan(planOf(workspace)); }, [workspace, editingPlan]);
+  useEffect(() => {
+    if (!editingPlan) { planBaseline.current = planOf(workspace); setPlan(planBaseline.current); }
+  }, [workspace, editingPlan]);
   useEffect(() => {
     if (!id) return;
     let active = true;
@@ -87,9 +89,7 @@ export default function JobWorkboard({ workspace, customerId, onSaveWorkspace, o
     if (plan.start && plan.finish && plan.finish < plan.start) { setError("The target finish must be on or after the start date."); return; }
     setSavingPlan(true); setError("");
     try {
-      await onSaveWorkspace(latest => ({ ...latest, stage: plan.stage,
-        record: { ...latest.record, team: { ...latest.record.team, projectManager: plan.manager.trim() },
-          checklist: { ...latest.record.checklist, startDate: plan.start, finishDate: plan.finish } } }));
+      await onSaveWorkspace(latest => applyJobPlan(latest, plan, planBaseline.current));
       setEditingPlan(false);
     } catch (value) { setError(value instanceof Error ? value.message : String(value)); }
     finally { setSavingPlan(false); }

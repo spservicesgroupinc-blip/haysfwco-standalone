@@ -92,7 +92,7 @@ async function runJobCustomerSync(
       const now = new Date().toISOString();
       customer = {
         id: crypto.randomUUID(),
-        revision: 0,
+        revision: 1,
         createdAt: now,
         updatedAt: now,
         name: entry.customer.trim(),
@@ -108,19 +108,20 @@ async function runJobCustomerSync(
       (existing.address || address) !== existing.address
     ) {
       // The job report never overwrites details a person already entered.
+      const expectedRevision = staged.get(existing.id)?.expectedRevision ?? existing.revision;
       const next: Customer = {
         ...existing,
         phone: existing.phone || phone,
         email: existing.email || email,
         address: existing.address || address,
-        revision: existing.revision + 1,
+        revision: expectedRevision + 1,
         updatedAt: new Date().toISOString(),
       };
       staged.set(existing.id, {
         customer: next,
-        expectedRevision:
-          staged.get(existing.id)?.expectedRevision ?? existing.revision,
+        expectedRevision,
       });
+      if (created.has(existing.id)) created.set(existing.id, next);
       updated.set(existing.id, next);
       customer = next;
     } else {

@@ -12,7 +12,9 @@ The Overview page is the daily workspace for a job: tasks, notes, deadlines, own
 
 ## Persistence
 
-Use existing CRM Tasks and Activities and existing workspace data. Both backend shapes already support workspaceId. Device saves and the background Apps Script queue remain in use; no new endpoint or backend deployment is needed. New task revisions anticipate their first server save so creating, editing, and completing work before cloud sync preserves the expected revision chain.
+Use existing CRM Tasks and Activities and existing workspace data. Both backend shapes already support workspaceId. Device saves and the background Apps Script queue remain in use. These features require the current CRM-capable `apps-script/Code.gs` to be deployed; the default endpoint still rejected `listCustomers` during the October 27, 2026 review. New customer and task revisions anticipate their first server save so creating and editing work before cloud sync preserves the expected revision chain. Multiple imported jobs enrich one customer within a single revision.
+
+Job plan saves apply only fields changed since editing began. Independent background updates are preserved; competing edits to the same plan field ask the user to cancel and review the latest plan. Date validation uses the merged plan.
 
 Task status remains open/done to keep the existing backend contract. No billing, crew scheduling, inventory, or additional top-level destination is introduced.
 

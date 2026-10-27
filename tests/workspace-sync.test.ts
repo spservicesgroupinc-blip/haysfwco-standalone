@@ -283,7 +283,7 @@ test('a later workspace revision without the matching mutation receipt cannot cl
   assert.equal((await cachedWorkspace(value.id))?.serverRevision, 0);
 });
 
-test('a refresh started before a save cannot roll the acknowledged workspace backward', async () => {
+test('a refresh started before another tab acknowledges a save cannot roll it backward', async () => {
   const value = job(); await saveWorkspaceLocally(value); await syncWorkspaces();
   const fetch = globalThis.fetch; const started = deferred(); const resume = deferred();
   globalThis.fetch = async (input, init) => {
@@ -292,7 +292,12 @@ test('a refresh started before a save cannot roll the acknowledged workspace bac
     return response;
   };
   const refreshing = refreshWorkspaces(); await started.promise;
-  value.record.customer.customerName = 'Acknowledged newer edit'; await saveWorkspaceLocally(value); await syncWorkspaces();
+  // Simulate a second tab's acknowledgment while this tab holds a stale read.
+  // A same-tab sync cannot overtake the serialized request holding the read.
+  value.record.customer.customerName = 'Acknowledged newer edit';
+  const saved = backend.post({ action: 'saveWorkspace', workspace: value, expectedRevision: 1, mutationId: 'other-tab-save' });
+  assert.equal(saved.ok, true);
+  await updateWorkspaceRow(value.id, () => ({ workspace: saved.workspace, serverRevision: 2, dirty: false }));
   resume.release(); await refreshing;
   assert.equal((await cachedWorkspace(value.id))?.serverRevision, 2);
   assert.equal((await cachedWorkspace(value.id))?.workspace.record.customer.customerName, 'Acknowledged newer edit');

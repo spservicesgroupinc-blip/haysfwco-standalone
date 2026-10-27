@@ -233,6 +233,6 @@ test("several jobs for one new customer produce one record and one revision bump
   assert.equal(customers[0].address, "1 Main St");
 
   const stored = await getLocalCustomer(customers[0].id);
-  // Created at 0 and completed once; three jobs are still a single mutation.
+  // The device anticipates revision 1; three jobs are still a single mutation.
   assert.equal(stored?.revision, 1);
 });

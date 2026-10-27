@@ -622,7 +622,7 @@ export default function JobWorkspace({
         ))}
       </nav>
       {tab === "overview" && <>
-        <JobWorkboard workspace={workspace} customerId={overviewCustomerId}
+        <JobWorkboard key={workspace.id} workspace={workspace} customerId={overviewCustomerId}
           onSaveWorkspace={async update => { await change(update(current.current!)); }}
           onOpenCustomer={onOpenCustomer}
           onEditContact={() => { setTab("details"); setFocusField("customer-customerName"); }} />
