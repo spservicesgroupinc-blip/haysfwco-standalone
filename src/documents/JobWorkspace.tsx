@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import type { ChangeRequest, JobEntry, RequestSummary } from "../types";
 import type { CustomerSummary } from "../crm/types";
-import CustomerDetail from "../components/crm/CustomerDetail";
+import JobWorkboard from "./JobWorkboard";
 import { requestBelongsToRecord } from "../services/recordRequests";
 import { customerIdForPick } from "../services/customerDirectory";
 import { listDrafts, type RequestDraft } from "../services/requestDrafts";
@@ -94,6 +94,7 @@ export default function JobWorkspace({
   customers = [],
   onNewRequest,
   onOpenRequest,
+  onOpenCustomer,
   onResumeDraft,
   onBack,
 }: {
@@ -103,6 +104,7 @@ export default function JobWorkspace({
   customers?: CustomerSummary[];
   onNewRequest: (request: ChangeRequest) => void;
   onOpenRequest: (id: string) => void;
+  onOpenCustomer: (id: string) => void;
   onResumeDraft: (draft: RequestDraft) => void;
   onBack: () => void;
 }) {
@@ -273,6 +275,7 @@ export default function JobWorkspace({
       });
     writes.current = saved;
     void writes.current.catch(() => undefined);
+    return saved;
   };
   const recordChange = (record: RestorationJobData) => {
     if (current.current)
@@ -619,6 +622,10 @@ export default function JobWorkspace({
         ))}
       </nav>
       {tab === "overview" && <>
+        <JobWorkboard workspace={workspace} customerId={overviewCustomerId}
+          onSaveWorkspace={async update => { await change(update(current.current!)); }}
+          onOpenCustomer={onOpenCustomer}
+          onEditContact={() => { setTab("details"); setFocusField("customer-customerName"); }} />
         <section className="workspace-panel job-dashboard" aria-label="Job dashboard">
           <div className="workspace-panel-heading">
             <div><p className="workspace-eyebrow">Customer & job dashboard</p><h2>{data.customer.customerName || "New job"}</h2>
@@ -653,22 +660,6 @@ export default function JobWorkspace({
           {!documents.length && <p>No job documents saved yet.</p>}
           <button className="button" onClick={() => setTab("documents")}>Open documents</button>
         </section>
-        {(overviewCustomerId ? <CustomerDetail
-        key={overviewCustomerId}
-        id={overviewCustomerId}
-        embedded
-        workspaceId={workspace.id}
-        contactOverride={data.customer}
-        requestSummaries={requests}
-        onBack={onBack}
-        onOpenRequest={onOpenRequest}
-        onEditContact={() => { setTab("details"); setFocusField("customer-customerName"); }}
-      /> : <section className="workspace-panel" aria-label="Record overview">
-        <h2>Contact details</h2>
-        <p>{data.customer.mainPhone || data.customer.mobilePhone || data.customer.homePhone || "Add a phone number to keep in touch."}</p>
-        {data.customer.email && <p><a href={`mailto:${data.customer.email}`}>{data.customer.email}</a></p>}
-        <button className="button" onClick={() => setTab("details")}>Edit job details</button>
-      </section>)}
       </>}
       {tab === "details" && (
         <div className="workspace-form">

@@ -133,6 +133,7 @@ export default function JobsDocuments({
         customers={customers}
         onNewRequest={onNewRequest}
         onOpenRequest={onOpenRequest}
+        onOpenCustomer={onOpenCustomer}
         onResumeDraft={onResumeDraft}
         onBack={onBack}
       />

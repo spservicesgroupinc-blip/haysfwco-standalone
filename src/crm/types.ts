@@ -91,12 +91,14 @@ export interface NewCustomerInput {
 }
 
 export interface NewTaskInput {
+  workspaceId?: string;
   title: string;
   dueDate?: string;
   assignee?: string;
 }
 
 export interface NewCommunicationInput {
+  workspaceId?: string;
   kind: "call" | "email" | "sms" | "meeting" | "other";
   direction: "inbound" | "outbound";
   summary: string;

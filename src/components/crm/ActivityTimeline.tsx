@@ -17,6 +17,7 @@ import "./crm.css";
 
 export interface ActivityTimelineProps {
   activities: Activity[];
+  label?: string;
   onAddNote: (body: string) => Promise<void>;
   onLogCommunication: (input: NewCommunicationInput) => Promise<void>;
 }
@@ -55,6 +56,7 @@ function kindIcon(kind: ActivityKind) {
 
 export default function ActivityTimeline({
   activities,
+  label = "Activity",
   onAddNote,
   onLogCommunication,
 }: ActivityTimelineProps) {
@@ -64,15 +66,19 @@ export default function ActivityTimeline({
   const [direction, setDirection] =
     useState<NewCommunicationInput["direction"]>("outbound");
   const [summary, setSummary] = useState("");
+  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function submitNote(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!note.trim() || busy) return;
     setBusy(true);
+    setError("");
     try {
       await onAddNote(note.trim());
       setNote("");
+    } catch (value) {
+      setError(value instanceof Error ? value.message : String(value));
     } finally {
       setBusy(false);
     }
@@ -82,10 +88,13 @@ export default function ActivityTimeline({
     event.preventDefault();
     if (!summary.trim() || busy) return;
     setBusy(true);
+    setError("");
     try {
       await onLogCommunication({ kind, direction, summary: summary.trim() });
       setSummary("");
       setLogOpen(false);
+    } catch (value) {
+      setError(value instanceof Error ? value.message : String(value));
     } finally {
       setBusy(false);
     }
@@ -94,9 +103,9 @@ export default function ActivityTimeline({
   const sorted = [...activities].sort((a, b) => b.at.localeCompare(a.at));
 
   return (
-    <section className="crm-section" aria-label="Activity">
+    <section className="crm-section" aria-label={label}>
       <div className="crm-section-head">
-        <h2>Activity</h2>
+        <h2>{label}</h2>
         <button
           type="button"
           className="text-button"
@@ -108,6 +117,7 @@ export default function ActivityTimeline({
         </button>
       </div>
 
+      {error && <p className="notice danger" role="alert">{error}</p>}
       {logOpen ? (
         <form className="crm-log-form" onSubmit={submitCommunication}>
           <div className="crm-field">

@@ -520,3 +520,23 @@
     width: 100%;
   }
 }
+
+/* Job and customer task management share the same accessible controls. */
+.task-completion { color: #6c7788; font-size: 12px; }
+.task-manager .crm-task-form { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 12px; }
+.task-manager .crm-task-form .crm-field { min-width: 0; }
+.task-manager .task-title-field { grid-column: 1 / -1; }
+.task-manager .crm-task-form .button-row { align-self: end; grid-column: 1 / -1; }
+.task-filter-row { display: flex; flex-wrap: wrap; gap: 6px; padding: 14px 0; border-top: 1px solid #edf0f4; }
+.task-filter-row button { border: 1px solid transparent; border-radius: 6px; padding: 7px 9px; font-size: 12px; background: #f5f7fa; color: #556276; cursor: pointer; }
+.task-filter-row button.active { background: #fff0f0; border-color: #f2d5d7; color: #b91c24; }
+.task-filter-row span { margin-left: 4px; font-weight: 700; }
+.task-search-row { display: flex; gap: 10px; margin: 0 0 12px; }
+.task-search { display: flex; align-items: center; gap: 7px; flex: 1; min-width: 0; border: 1px solid #e0e5ed; border-radius: 7px; padding: 0 9px; }
+.task-search input { width: 100%; min-width: 0; padding: 10px 0; border: 0; outline: 0; color: inherit; background: transparent; font-size: 13px; }
+.task-search:focus-within { outline: 2px solid #c8232d; outline-offset: 2px; }
+.task-search-row select { max-width: 45%; min-width: 0; border: 1px solid #e0e5ed; border-radius: 7px; padding: 8px; font-size: 12px; background: #fff; color: #46505e; }
+.task-manager .crm-task-main strong { overflow-wrap: anywhere; }
+.task-manager .crm-task-checkbox { width: 22px; height: 22px; }
+.task-manager .icon-button { flex-shrink: 0; }
+@media (max-width: 420px) { .task-manager .crm-task-form { grid-template-columns: 1fr; } .task-search-row { flex-direction: column; } .task-search-row select { max-width: 100%; } .task-manager .crm-task { gap: 8px; } .task-manager .crm-task-done { display: none; } }

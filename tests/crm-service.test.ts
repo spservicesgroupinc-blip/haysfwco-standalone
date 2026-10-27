@@ -124,13 +124,13 @@ test("tasks open by default and toggle to done with a completed timestamp", asyn
     assignee: "Dana",
   });
   assert.equal(task.status, "open");
-  assert.equal(task.revision, 0);
+  assert.equal(task.revision, 1);
   assert.equal(task.completedAt, undefined);
 
   const done = await toggleTask(task);
   assert.equal(done.status, "done");
   assert.ok(done.completedAt);
-  assert.equal(done.revision, 1);
+  assert.equal(done.revision, 2);
 
   const tasks = await listTasks(customer.id);
   assert.equal(tasks.length, 1);

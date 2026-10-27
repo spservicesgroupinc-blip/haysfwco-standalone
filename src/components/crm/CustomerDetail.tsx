@@ -28,6 +28,7 @@ import {
   setWorkspaceStage,
   subscribeCrm,
   toggleTask,
+  updateTask,
 } from "../../crm";
 import type {
   Activity,
@@ -512,6 +513,7 @@ export default function CustomerDetail({ id, onBack, onOpenWorkspace, onOpenRequ
         tasks={tasks}
         onAddTask={handleAddTask}
         onToggle={handleToggleTask}
+        onEditTask={async (task, input) => { await updateTask(task, input); await loadTasks(); }}
       />
       </aside>
       </div>

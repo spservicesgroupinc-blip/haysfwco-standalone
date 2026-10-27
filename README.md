@@ -59,7 +59,7 @@ The parser supports positioned Final Draft tables, wrapped descriptions, repeate
 
 **Customers** and **Jobs & Documents** open the same searchable **Jobs & Customers** directory. CSV rows, saved jobs, and customer contacts open permanent job dashboards with changes, job PDFs, request files, contact details, activity, and follow-ups. Selecting an uploaded job in Quick Request starts its workspace automatically; device drafts can be resumed from the dashboard. New requests retain both job and customer links. Matching older requests appear by job number without rewriting their saved contents.
 
-The uploaded CSV can be replaced without deleting saved job dashboards or document history. A customer may have multiple jobs; each job number retains its own changes and documents. **Manage customer contacts & follow-ups** opens the existing customer management tools. See [dashboard behavior](docs/customer-job-dashboard.md).
+The uploaded CSV can be replaced without deleting saved job dashboards or document history. A customer may have multiple jobs; each job number retains its own changes and documents. **Manage customer contacts & follow-ups** opens the existing customer management tools. See [dashboard behavior](docs/customer-job-dashboard.md). Job Overview also includes assigned tasks, due dates, overdue filters, editable job plans, next actions, and job-specific notes. See [job management](docs/job-management.md).
 
 Customer management includes:
 

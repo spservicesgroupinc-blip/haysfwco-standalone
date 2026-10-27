@@ -192,10 +192,11 @@ export async function listActivities(customerId: string): Promise<Activity[]> {
   return activities.sort((a, b) => b.at.localeCompare(a.at));
 }
 
-export async function addNote(customerId: string, body: string, by?: string): Promise<Activity> {
+export async function addNote(customerId: string, body: string, by?: string, workspaceId?: string): Promise<Activity> {
   const activity: Activity = {
     id: crypto.randomUUID(),
     customerId,
+    workspaceId,
     kind: "note",
     direction: "system",
     body,
@@ -213,6 +214,7 @@ export async function logCommunication(
   const activity: Activity = {
     id: crypto.randomUUID(),
     customerId,
+    workspaceId: input.workspaceId,
     kind: input.kind,
     direction: input.direction,
     body: input.summary,
@@ -234,29 +236,34 @@ export async function listTasks(customerId: string): Promise<Task[]> {
   });
 }
 
+function taskFields(input: NewTaskInput): NewTaskInput {
+  const title = input.title.trim();
+  if (!title || title.length > 1000) throw new Error("Enter a task title up to 1,000 characters.");
+  if (input.dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(input.dueDate)) throw new Error("Choose a valid due date.");
+  return { ...input, title, assignee: input.assignee?.trim() || undefined, dueDate: input.dueDate || undefined };
+}
+
 export async function createTask(customerId: string, input: NewTaskInput): Promise<Task> {
-  const now = new Date().toISOString();
   const task: Task = {
-    id: crypto.randomUUID(),
-    customerId,
-    title: input.title,
-    dueDate: input.dueDate,
-    assignee: input.assignee,
-    status: "open",
-    revision: 0,
-    createdAt: now,
+    ...taskFields(input), id: crypto.randomUUID(), customerId, status: "open",
+    revision: 1, createdAt: new Date().toISOString(),
   };
+  // Local revisions anticipate each queued server save, including edits made offline.
   await stageTask(task, 0);
   return task;
 }
 
+export async function updateTask(task: Task, input: NewTaskInput): Promise<Task> {
+  const next: Task = { ...task, ...taskFields(input), revision: task.revision + 1 };
+  await stageTask(next, task.revision);
+  return next;
+}
+
 export async function toggleTask(task: Task): Promise<Task> {
-  const now = new Date().toISOString();
   const done = task.status !== "done";
   const next: Task = {
-    ...task,
-    status: done ? "done" : "open",
-    completedAt: done ? now : undefined,
+    ...task, status: done ? "done" : "open",
+    completedAt: done ? new Date().toISOString() : undefined,
     revision: task.revision + 1,
   };
   await stageTask(next, task.revision);
