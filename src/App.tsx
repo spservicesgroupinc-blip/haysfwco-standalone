@@ -46,6 +46,7 @@ import ConfirmDeleteModal from "./components/ConfirmDeleteModal";
 import {
   HOME,
   REVIEW,
+  ESTIMATOR,
   destinationToView,
   hashToView,
   initialView,
@@ -59,6 +60,7 @@ import {
 import AppHeader from "./components/AppHeader";
 import AdminJobs from "./components/AdminJobs";
 import Dashboard from "./components/Dashboard";
+import EstimatorDashboard from "./components/EstimatorDashboard";
 import SimpleRequest from "./components/SimpleRequest";
 import RequestReview from "./components/RequestReview";
 import PdfViewer from "./components/PdfViewer";
@@ -234,6 +236,8 @@ export default function App() {
   const [requestDraft, setRequestDraft] = useState<RequestDraft>();
   const [saveError, setSaveError] = useState("");
   const [busy, setBusy] = useState("");
+  const requestOpenSequence = useRef(0);
+  const openingRequest = useRef(false);
   const [preview, setPreview] = useState<{ name: string; blob: Blob } | null>(
     null,
   );
@@ -265,7 +269,12 @@ export default function App() {
    */
   const navigateTo = useCallback(
     (next: View, mode: "push" | "replace" = "push") => {
-      if (viewRef.current.kind === "review" && next.kind !== "review") queueScroll.current = window.scrollY;
+      requestOpenSequence.current++;
+      if (openingRequest.current) {
+        openingRequest.current = false;
+        setBusy("");
+      }
+      if ((viewRef.current.kind === "review" || viewRef.current.kind === "estimator") && next.kind !== viewRef.current.kind) queueScroll.current = window.scrollY;
       viewRef.current = next;
       setViewState(next);
       persistView(next);
@@ -344,7 +353,7 @@ export default function App() {
         setNewRequestSeed(undefined);
         setRequestDraft(undefined);
       }
-      if (next.kind === "review" || next.kind === "dashboard") void refresh();
+      if (next.kind === "review" || next.kind === "dashboard" || next.kind === "estimator") void refresh();
     },
     [navigateTo, refresh],
   );
@@ -355,6 +364,23 @@ export default function App() {
   );
 
   const goHome = useCallback(() => goTo(HOME), [goTo]);
+
+  // Keep the estimating inbox current while it is visible, including when
+  // another device submits a request or this window reconnects.
+  useEffect(() => {
+    if (view.kind !== "estimator") return;
+    const update = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    const timer = window.setInterval(update, 30000);
+    window.addEventListener("focus", update);
+    window.addEventListener("online", update);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", update);
+      window.removeEventListener("online", update);
+    };
+  }, [view.kind, refresh]);
 
   const handleDeleteRequest = useCallback(
     async (id: string) => {
@@ -398,12 +424,13 @@ export default function App() {
     // The current entry becomes the dashboard, so backing out of a restored
     // deep link lands on the request list instead of leaving the app.
     const initial = viewRef.current;
-    window.history.replaceState(null, "", viewToHash(HOME));
-    if (!sameView(initial, HOME))
+    const initialBack = initial.kind === "request" && initial.estimator ? ESTIMATOR : HOME;
+    window.history.replaceState(null, "", viewToHash(initialBack));
+    if (!sameView(initial, initialBack))
       window.history.pushState(null, "", viewToHash(initial));
 
     void refresh().finally(() => setReady(true));
-    if (initial.kind === "request") void openRequestById(initial.id);
+    if (initial.kind === "request") void openRequestById(initial.id, initial.estimator);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -434,10 +461,7 @@ export default function App() {
       }
       leaveGuard.current = null;
       if (next.kind === "request") {
-        setRequest(null);
-        navigateTo(next, "replace");
-        setOpenError("");
-        void openRequestById(next.id);
+        void openRequestById(next.id, next.estimator);
         return;
       }
       goTo(next, "replace");
@@ -451,10 +475,10 @@ export default function App() {
   // follow the new content instead of silently staying on the old heading.
   const viewKey =
     view.kind === "request" || view.kind === "workspace" || view.kind === "customer"
-      ? `${view.kind}:${view.id}`
+      ? `${view.kind}:${view.id}${view.kind === "request" && view.estimator ? ":estimator" : ""}`
       : view.kind;
   useEffect(() => {
-    const returnToQueue = view.kind === "review" && previousView.current === "request";
+    const returnToQueue = (view.kind === "review" || view.kind === "estimator") && previousView.current === "request";
     previousView.current = view.kind;
     window.scrollTo({ top: returnToQueue ? queueScroll.current : 0, left: 0 });
     mainRef.current?.focus({ preventScroll: true });
@@ -467,20 +491,37 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [ready]);
 
-  async function openRequestById(id: string) {
+  async function openRequestById(id: string, estimator = false) {
+    const target: View = { kind: "request", id, ...(estimator ? { estimator: true } : {}) };
+    if (!sameView(target, viewRef.current) && leaveGuard.current && !leaveGuard.current()) return;
+    leaveGuard.current = null;
+    navigateTo(target);
+    const sequence = ++requestOpenSequence.current;
+    openingRequest.current = true;
+    setRequest(null);
     setBusy("Opening request…");
     setOpenError("");
+    setSaveError("");
     try {
-      const data = await openRequest(id);
+      let data = await openRequest(id);
+      if (sequence !== requestOpenSequence.current) return;
+      if (estimator && data.status === "submitted") {
+        // Use the existing claim API so completion remains compatible with
+        // the shared backend. Team ownership does not identify an individual.
+        data = await claimRequest(data.id, data.revision, data.estimatorName.trim() || "Estimating team", newId());
+        void refresh();
+      }
+      if (sequence !== requestOpenSequence.current) return;
       setRequest(data);
-      setSaveError("");
-      navigateTo({ kind: "request", id: data.id });
     } catch (error) {
       // Shown inside the request view: a failed load must never leave the
       // screen on an endless spinner with no way back to the list.
-      setOpenError(error instanceof Error ? error.message : String(error));
+      if (sequence === requestOpenSequence.current) setOpenError(error instanceof Error ? error.message : String(error));
     } finally {
-      setBusy("");
+      if (sequence === requestOpenSequence.current) {
+        openingRequest.current = false;
+        setBusy("");
+      }
     }
   }
 
@@ -746,10 +787,12 @@ export default function App() {
   const back =
     view.kind === "dashboard"
       ? undefined
-      : view.kind === "review"
+      : view.kind === "review" || view.kind === "estimator"
         ? { label: "Dashboard", onClick: goHome }
         : view.kind === "request"
-          ? { label: "Back to requests", onClick: () => goTo(REVIEW) }
+          ? view.estimator
+            ? { label: "Back to estimator", onClick: () => goTo(ESTIMATOR) }
+            : { label: "Back to requests", onClick: () => goTo(REVIEW) }
           : view.kind === "customer"
             ? { label: "Back to customers", onClick: () => goTo({ kind: "customers" }) }
             : { label: "Back to dashboard", onClick: goHome };
@@ -767,7 +810,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <AppHeader
-        current={view.kind}
+        current={view.kind === "request" && view.estimator ? "estimator" : view.kind}
         onNavigate={navigate}
         back={back}
         subtitle={subtitle}
@@ -811,6 +854,10 @@ export default function App() {
               })().catch(error => setHomeNotice(error instanceof Error ? error.message : String(error)));
             }}
           />
+        </main>
+      ) : view.kind === "estimator" ? (
+        <main className="shell-home dash-shell" ref={mainRef} tabIndex={-1}>
+          <EstimatorDashboard requests={requests} onOpen={(id) => void openRequestById(id, true)} onRefresh={refresh} />
         </main>
       ) : view.kind === "simple" ? (
         <main className="shell-request" ref={mainRef} tabIndex={-1}>
@@ -883,8 +930,9 @@ export default function App() {
                 />
               </Suspense>
               <RequestReview
-                key={request.id}
+                key={`${request.id}:${view.estimator ? "estimator" : "request"}`}
                 request={request}
+                estimatorMode={view.estimator}
                 busy={busy}
                 onBack={goHome}
                 onPreview={(attachment) => void previewAttachment(attachment)}
@@ -915,12 +963,12 @@ export default function App() {
               <div className="button-row">
                 <button
                   className="button primary"
-                  onClick={() => void openRequestById(view.id)}
+                  onClick={() => void openRequestById(view.id, view.estimator)}
                 >
                   Try again
                 </button>
-                <button className="button" onClick={goHome}>
-                  Back to requests
+                <button className="button" onClick={() => goTo(view.estimator ? ESTIMATOR : REVIEW)}>
+                  {view.estimator ? "Back to estimator" : "Back to requests"}
                 </button>
               </div>
             </div>

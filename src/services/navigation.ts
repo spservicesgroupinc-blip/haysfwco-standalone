@@ -9,7 +9,8 @@
 export type View =
   | { kind: "dashboard" }
   | { kind: "review" }
-  | { kind: "request"; id: string }
+  | { kind: "estimator" }
+  | { kind: "request"; id: string; estimator?: boolean }
   | { kind: "workspaces"; tool?: "migration" | "reference" }
   | { kind: "workspace"; id: string }
   | { kind: "jobs" }
@@ -22,6 +23,7 @@ export type NavDestination =
   | "home"
   | "simple"
   | "review"
+  | "estimator"
   | "jobs"
   | "workspaces"
   | "migration"
@@ -30,12 +32,14 @@ export type NavDestination =
 
 export const DASHBOARD: View = { kind: "dashboard" };
 export const REVIEW: View = { kind: "review" };
+export const ESTIMATOR: View = { kind: "estimator" };
 export const HOME: View = DASHBOARD;
 
 const VIEW_KEY = "hays-active-view";
 
 export function destinationToView(destination: NavDestination): View {
   if (destination === "home") return DASHBOARD;
+  if (destination === "estimator") return ESTIMATOR;
   if (destination === "migration" || destination === "reference") return { kind: "workspaces", tool: destination };
   if (destination === "simple") return { kind: "simple" };
   if (destination === "jobs") return { kind: "jobs" };
@@ -53,7 +57,9 @@ export function viewToHash(view: View): string {
     case "workspace":
       return `#/workspaces/${encodeURIComponent(view.id)}`;
     case "request":
-      return `#/requests/${encodeURIComponent(view.id)}`;
+      return `#/${view.estimator ? "estimator" : "requests"}/${encodeURIComponent(view.id)}`;
+    case "estimator":
+      return "#/estimator";
     case "customer":
       return `#/customers/${encodeURIComponent(view.id)}`;
     case "customers":
@@ -87,6 +93,8 @@ export function hashToView(hash: string): View | null {
       return { kind: "jobs" };
     case "review":
       return REVIEW;
+    case "estimator":
+      return parts[1] ? { kind: "request", id: parts[1], estimator: true } : ESTIMATOR;
     case "requests":
       return parts[1] ? { kind: "request", id: parts[1] } : REVIEW;
     case "customers":
@@ -99,7 +107,7 @@ export function hashToView(hash: string): View | null {
 export function sameView(a: View, b: View): boolean {
   if (a.kind !== b.kind) return false;
   if (a.kind === "workspaces" && b.kind === "workspaces") return a.tool === b.tool;
-  if (a.kind === "request" && b.kind === "request") return a.id === b.id;
+  if (a.kind === "request" && b.kind === "request") return a.id === b.id && Boolean(a.estimator) === Boolean(b.estimator);
   if (a.kind === "workspace" && b.kind === "workspace") return a.id === b.id;
   if (a.kind === "customer" && b.kind === "customer") return a.id === b.id;
   return true;
@@ -111,7 +119,9 @@ export function viewLabel(view: View): string {
     case "workspace":
       return "Jobs & Documents";
     case "request":
-      return "Change order review";
+      return view.estimator ? "Estimator review" : "Change order review";
+    case "estimator":
+      return "Estimator dashboard";
     case "simple":
       return "Quick request";
     case "jobs":
@@ -160,7 +170,9 @@ export function readStoredView(): View {
       case "workspaces":
         return { kind: "workspaces" };
       case "request":
-        return parsed.id ? { kind: "request", id: String(parsed.id) } : REVIEW;
+        return parsed.id ? { kind: "request", id: String(parsed.id), ...(parsed.estimator ? { estimator: true } : {}) } : REVIEW;
+      case "estimator":
+        return ESTIMATOR;
       case "customer":
         return parsed.id ? { kind: "customer", id: String(parsed.id) } : { kind: "customers" };
       case "customers":

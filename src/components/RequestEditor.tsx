@@ -224,7 +224,7 @@ export default function RequestEditor({
       const pending = pendingSave.current;
       const saved = await saveRequest(
         pending.request,
-        request.revision,
+        initialDraft.revision,
         pending.mutationId,
       );
       onLeaveGuard(null);
