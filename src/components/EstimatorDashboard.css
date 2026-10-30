@@ -1,0 +1,50 @@
+.estimator-dashboard { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.estimator-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.estimator-head h1 { margin: 4px 0 8px; font-size: 28px; }
+.estimator-head p:not(.workspace-eyebrow) { color: var(--muted); font-size: 14px; }
+.estimator-head > .button { flex-shrink: 0; }
+.estimator-filters { display: flex; flex-wrap: wrap; gap: 8px; }
+.estimator-filters button { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--ink); font-size: 13px; font-weight: 600; }
+.estimator-filters button[aria-pressed="true"] { color: var(--red-dark, #b91c1c); border-color: var(--red, #dc2626); background: var(--red-soft, #fff7f7); }
+.estimator-filters button > span { padding: 2px 6px; border-radius: 4px; background: var(--bg, #f1f5f9); color: var(--muted); font-size: 12px; }
+.estimator-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.estimator-search { flex: 1; max-width: 440px; min-width: 0; min-height: 44px; background: var(--surface); }
+.estimator-search:focus-within { outline: 3px solid var(--red-dark, #b91c1c); outline-offset: 3px; }
+.estimator-search input { min-width: 0; width: 100%; font-size: 16px; }
+.estimator-toolbar > p, .estimator-refresh-message { color: var(--muted); font-size: 12px; }
+.estimator-refresh-message:empty { display: none; }
+.estimator-refresh-message { margin: -8px 0; }
+.estimator-queue { overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.estimator-columns, .estimator-request { display: grid; grid-template-columns: minmax(180px, 1fr) 104px minmax(112px, .55fr) 100px 124px; align-items: center; gap: 16px; padding: 16px 20px; }
+.estimator-columns { color: var(--muted); background: var(--bg, #f8fafc); font-size: 12px; font-weight: 600; }
+.estimator-request-list { list-style: none; margin: 0; padding: 0; }
+.estimator-request-list li { border-top: 1px solid var(--border); }
+.estimator-request { width: 100%; min-width: 0; border: 0; background: transparent; text-align: left; color: var(--ink); }
+.estimator-request:hover { background: var(--bg, #f8fafc); }
+.estimator-request:focus-visible { position: relative; outline-offset: -3px; }
+.estimator-request-job, .estimator-request-details { display: flex; flex-direction: column; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.estimator-request-job > strong { font-size: 14px; }
+.estimator-request-job > span, .estimator-request-details, .estimator-request time, .estimator-request-date { color: var(--muted); font-size: 12px; }
+.estimator-request .request-status { width: fit-content; min-width: 0; white-space: normal; font-size: 11px; text-transform: none; }
+.estimator-request-action { display: inline-flex; align-items: center; justify-content: flex-end; gap: 8px; color: var(--red-dark, #b91c1c); font-size: 13px; font-weight: 600; }
+.estimator-request-action svg { flex-shrink: 0; }
+.estimator-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 48px 24px; text-align: center; }
+.estimator-empty > svg { color: var(--muted); }
+.estimator-empty h2 { font-size: 18px; }
+.estimator-empty p { max-width: 440px; color: var(--muted); font-size: 14px; }
+@media (max-width: 1000px) {
+  .estimator-columns, .estimator-request { grid-template-columns: minmax(140px, 1fr) 96px minmax(96px, .6fr) 88px 112px; gap: 12px; padding: 16px; }
+}
+@media (max-width: 760px) {
+  .estimator-head, .estimator-toolbar { flex-direction: column; align-items: stretch; gap: 12px; }
+  .estimator-head h1 { font-size: 24px; }
+  .estimator-head > .button { align-self: flex-start; }
+  .estimator-search { width: 100%; max-width: none; }
+  .estimator-columns { display: none; }
+  .estimator-request-list li:first-child { border-top: 0; }
+  .estimator-request { grid-template-columns: minmax(0, 1fr) auto; gap: 12px; padding: 16px; }
+  .estimator-request-job { grid-column: 1 / -1; }
+  .estimator-request-details { grid-column: 1; grid-row: 3; }
+  .estimator-request time, .estimator-request-date { grid-column: 2; grid-row: 2; text-align: right; }
+  .estimator-request-action { grid-column: 1 / -1; justify-content: flex-start; padding-top: 4px; }
+}

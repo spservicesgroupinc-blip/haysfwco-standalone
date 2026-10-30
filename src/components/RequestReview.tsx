@@ -38,6 +38,7 @@ export default function RequestReview({
   onBusy,
   onLeaveGuard,
   onDelete,
+  estimatorMode = false,
 }: {
   request: ChangeRequest;
   busy: string;
@@ -54,12 +55,15 @@ export default function RequestReview({
   onBusy: (message: string) => void;
   onLeaveGuard: (guard: (() => boolean) | null) => void;
   onDelete?: (id: string) => Promise<void> | void;
+  estimatorMode?: boolean;
 }) {
   const [claimName, setClaimName] = useState("");
   const [question, setQuestion] = useState("");
   const [asking, setAsking] = useState(false);
   const [response, setResponse] = useState("");
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(
+    () => estimatorMode && request.status === "in_review",
+  );
   const [preparingDocument, setPreparingDocument] = useState(false);
   const [emailAddress, setEmailAddress] = useState("");
   const [sendingEmail, setSendingEmail] = useState(false);
@@ -105,7 +109,12 @@ export default function RequestReview({
 
   return (
     <div className={"review"+(editing?" is-editing":"")}>
-      <header className="review-title"><div><p className="workspace-eyebrow">Request review</p><h1>{request.job.customer||"Untitled request"}</h1><p>{request.job.jobNumber||"Job number not provided"} ? {request.estimatorName||"Estimator unassigned"}</p></div><span className={"request-status status-"+request.status}>{{submitted:"In queue",in_review:"In review",needs_information:"Needs info",completed:"Completed"}[request.status]}</span></header>
+      <header className="review-title"><div><p className="workspace-eyebrow">{estimatorMode ? "Estimator review" : "Request review"}</p><h1>{request.job.customer||"Untitled request"}</h1><p>{request.job.jobNumber||"Job number not provided"} ? {request.estimatorName||"Estimator unassigned"}</p></div><span className={"request-status status-"+request.status}>{{submitted:"In queue",in_review:"In review",needs_information:"Needs info",completed:"Completed"}[request.status]}</span></header>
+      {estimatorMode && request.status === "in_review" ? (
+        <p className="receipt-caption">
+          Review the details, save your changes, then mark the request complete.
+        </p>
+      ) : null}
       <div className="review-actions">
         <CopyDashNote
           text={formatDashNote(request)}

@@ -15,12 +15,24 @@ Open http://localhost:3000. `npm run build` creates the production site in `dist
 The layout adapts automatically to the available screen width. At 860px and below,
 Home focuses on creating requests, finding jobs, and the three most recent requests.
 Company statistics, completed requests, and customer lists expand under **Company
-overview**. Phone navigation keeps **Home**, **Requests**, **New request**, and
-**Jobs** available, with customers in the shared Jobs & Customers directory and
+overview**. Phone navigation keeps **Home**, **Requests**, **Estimator**, **New request**,
+and **Jobs** available, with customers in the shared Jobs & Customers directory and
 imports under **Tools**. Wider screens show the full dashboard and desktop navigation.
 Both layouts use the same records and forms; resizing does not reset an open request.
 
 ## Use
+
+The **Estimator** tab opens a dedicated dashboard at `#/estimator`. Submitted
+requests appear automatically in the shared queue; **Open** shows unfinished
+requests, with search and status filters for finding work. The dashboard refreshes
+every 30 seconds while visible, when the window regains focus or reconnects, and
+with **Refresh requests**. Opening a submitted request starts review through the
+existing backend and opens the editor directly, without entering a name or
+clicking **Start work**. Existing estimator assignments are retained; unassigned
+requests use the shared **Estimating team** assignment. Save or cancel edits to
+use **Prepare change order**, **Request more information**, and **Mark complete**.
+Completed requests remain read-only under **Completed**. **Back to estimator**
+returns to this queue, and estimator request URLs preserve that context on reload.
 
 Choose **Change order** or **Insurance supplement** in the request details,
 and check **Yes, customer credits** when applicable. **Copy Dash note** above

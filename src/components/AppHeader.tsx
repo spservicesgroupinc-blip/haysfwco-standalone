@@ -53,6 +53,7 @@ export default function AppHeader({current, onNavigate, back, subtitle, actions,
           <nav className="desktop-nav" aria-label="Main navigation">
             <button className={"nav-link nav-home" + (active("home") ? " is-current" : "")} aria-current={active("home") ? "page" : undefined} onClick={() => navigate("home")}>Home</button>
             <button className={"nav-link" + (active("review") ? " is-current" : "")} aria-current={active("review") ? "page" : undefined} onClick={() => navigate("review")}>Requests</button>
+            <button className={"nav-link" + (active("estimator") ? " is-current" : "")} aria-current={active("estimator") ? "page" : undefined} onClick={() => navigate("estimator")}>Estimator</button>
             <button className={"nav-link" + (active("customers") ? " is-current" : "")} aria-current={active("customers") ? "page" : undefined} onClick={() => navigate("customers")}>Customers</button>
             <button className={"nav-link" + (active("workspaces") ? " is-current" : "")} aria-current={active("workspaces") ? "page" : undefined} onClick={() => navigate("workspaces")}>Jobs & Documents</button>
           </nav>
@@ -74,6 +75,7 @@ export default function AppHeader({current, onNavigate, back, subtitle, actions,
     <nav className={"mobile-nav" + (keyboardOpen ? " is-hidden" : "")} aria-label="Phone navigation">
       <button aria-current={active("home") ? "page" : undefined} onClick={() => navigate("home")}><LayoutDashboard size={20}/><span>Home</span></button>
       <button aria-current={active("review") ? "page" : undefined} onClick={() => navigate("review")}><ClipboardList size={20}/><span>Requests</span></button>
+      <button aria-current={active("estimator") ? "page" : undefined} onClick={() => navigate("estimator")}><ListChecks size={20}/><span>Estimator</span></button>
       <button className="mobile-create" aria-current={current === "simple" ? "page" : undefined} onClick={() => navigate("simple")}><Plus size={22}/><span>New request</span></button>
       <button aria-current={active("workspaces") || active("customers") || current === "customer" ? "page" : undefined} onClick={() => navigate("workspaces")}><ListChecks size={20}/><span>Jobs</span></button>
     </nav>
